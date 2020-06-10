@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -20,9 +21,14 @@ import (
 	"github.com/jackc/pgx/v4"
 
 	// "github.com/go-chi/render"
+	"github.com/antonlindstrom/pgstore"
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/schema"
-	"github.com/jackc/pgx/v4/pgxpool"
+
+	"github.com/gorilla/sessions"
+
+	// "github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v4/stdlib"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -81,9 +87,12 @@ func NewChatroom() *Chatroom {
 
 var chatrooms = make(map[string]*Chatroom, 0)
 
-var dbpool *pgxpool.Pool
+// var db *pgxpool.Pool
+var db *sql.DB
 var validate *validator.Validate
 var tmpl *template.Template
+
+var store *pgstore.PGStore
 
 func main() {
 	err := godotenv.Load()
@@ -91,22 +100,27 @@ func main() {
 		log.Fatal("Error loading .env file:\n", err)
 	}
 
-	// fmt.Println(os.Getenv("DATABASE_URL"))
 	tmpl, err = template.New("templates").ParseGlob("templates/*.html")
 	if err != nil {
 		log.Println(err)
 		return
 	}
+
 	validate = validator.New()
-	dbpool, err = pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	// dbpool, err = pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	db, err = sql.Open("pgx", os.Getenv("DATABASE_URL"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)
 	}
-	defer dbpool.Close()
+	store, err = pgstore.NewPGStoreFromPool(db, []byte(os.Getenv("SESSION_SECRET")))
+	if err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
+	defer db.Close()
 
-	_, err = dbpool.Exec(
-		context.Background(),
+	_, err = db.Exec(
 		`CREATE TABLE IF NOT EXISTS Users (
 			id serial PRIMARY KEY,
 			email TEXT NOT NULL,
@@ -123,9 +137,9 @@ func main() {
 	router.Use(middleware.Logger)
 	router.Post("/signup", signup)
 	router.Post("/login", login)
-	router.Get("/chat", chat)
-
+	router.With(validateUserSession).Get("/chat", chat)
 	router.Handle("/", http.FileServer(http.Dir("./frontend")))
+
 	FileServer(router, "/", http.Dir("./frontend"))
 	http.ListenAndServe(addr, router)
 }
@@ -150,7 +164,6 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 }
 
 func signup(w http.ResponseWriter, req *http.Request) {
-
 	var form UserSignup
 	req.ParseMultipartForm(50000)
 	err := decoder.Decode(&form, req.PostForm)
@@ -174,8 +187,7 @@ func signup(w http.ResponseWriter, req *http.Request) {
 	}
 	fmt.Println(string(hash))
 
-	// // _, _ = checkUserExists(ctx, dbpool, form.Email, form.Username)
-	emailExists, usernameExists := checkUserExists(req.Context(), dbpool, form.Email, form.Username)
+	emailExists, usernameExists := checkUserExists(req.Context(), db, form.Email, form.Username)
 
 	userExists := struct {
 		username       string
@@ -190,7 +202,7 @@ func signup(w http.ResponseWriter, req *http.Request) {
 	}
 
 	fmt.Println(emailExists, usernameExists)
-	// // TODO COMPLETE THIS
+	// TODO COMPLETE THIS AND ACTUALLY IMPLEMENT THE TEMPLATES
 	if usernameExists && emailExists {
 		w.WriteHeader(http.StatusOK)
 		tmpl.ExecuteTemplate(w, "signup.html", userExists)
@@ -210,20 +222,41 @@ func signup(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	_, err = dbpool.Exec(
-		req.Context(),
-		`INSERT INTO Users (email, username, password) VALUES ($1, $2, $3)`,
-		form.Email,
-		form.Username,
-		string(hash),
-	)
-	if err != nil {
+	conn, err := stdlib.AcquireConn(db)
+	if err == nil {
+		conn.Exec(
+			req.Context(),
+			`INSERT INTO Users (email, username, password) VALUES ($1, $2, $3)`,
+			form.Email,
+			form.Username,
+			string(hash),
+		)
+		stdlib.ReleaseConn(db, conn)
+	} else {
 		log.Println("error inserting values: \n", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
 	w.WriteHeader(http.StatusAccepted)
 	tmpl.ExecuteTemplate(w, "login.html", nil)
+}
+
+func validateUserSession(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		session, err := store.Get(req, "session-name")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Println(err)
+			return
+		}
+		if session.IsNew {
+			http.Redirect(w, req, "login", http.StatusSeeOther)
+			return
+		}
+		fmt.Printf("%+v\n", session)
+		next.ServeHTTP(w, req)
+	})
 }
 
 func login(w http.ResponseWriter, req *http.Request) {
@@ -239,8 +272,7 @@ func login(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	row := dbpool.QueryRow(
-		req.Context(),
+	row := db.QueryRow(
 		`SELECT password FROM Users WHERE email=$1`,
 		form.Email,
 	)
@@ -261,21 +293,33 @@ func login(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// password did match
-	// TODO add sessions handling; refresh session
-	w.WriteHeader(http.StatusAccepted)
-	tmpl.ExecuteTemplate(w, "rooms.html", nil)
-	// ctx.HTML(http.StatusSeeOther, "room.tmpl", gin.H{})
+	session, err := store.New(req, "session-name")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err)
+		return
+	}
+	session.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   60 * 60 * 24 * 7,
+		HttpOnly: true,
+	}
+	err = session.Save(req, w)
+	if err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, req, "/chat", http.StatusSeeOther)
 }
 
 func chat(w http.ResponseWriter, req *http.Request) {
-	// check session and if session doesn't exist then redirect to login
-	http.Redirect(w, req, "login", http.StatusSeeOther)
+	http.ServeFile(w, req, "./frontend/chat")
 }
 
-func checkUserExists(ctx context.Context, dbpool *pgxpool.Pool, email string, username string) (emailExists, usernameExists bool) {
+func checkUserExists(ctx context.Context, dbpool *sql.DB, email string, username string) (emailExists, usernameExists bool) {
 	row := dbpool.QueryRow(
-		ctx,
 		`SELECT email FROM Users WHERE email=$1`,
 		email,
 	)
@@ -286,7 +330,6 @@ func checkUserExists(ctx context.Context, dbpool *pgxpool.Pool, email string, us
 		emailExists = false
 	}
 	row = dbpool.QueryRow(
-		ctx,
 		`SELECT username FROM Users WHERE username=$1`,
 		username,
 	)
