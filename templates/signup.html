@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <title>chatapp signin</title>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.5, user-scalable=no" />
+    <link rel="stylesheet" type="text/css" href="/css/signup.css" />
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans&display=swap" rel="stylesheet" />
+    <script src="/js/signup.js" defer></script>
+</head>
+
+<body>
+    <header>
+        <nav id="nav">
+            <a id="chat-app" href="/">Chat App</a>
+            <div id="user-auth-actions">
+                <a href="/login" id="login">Login</a>
+            </div>
+        </nav>
+    </header>
+    <main>
+        <h1>Huge Problem</h1>
+        <div id="sign-up-wrapper">
+            <h2>Create Account</h2>
+            <form id="sign-up" action="/signup" method="post">
+                <div id="form-inputs">
+                    <div class="input-group">
+                        <label class="sign-up-label" form="sign-up" for="email">Email</label><br>
+                        <input class="sign-up-input" form="sign-up" id="email" name="email" type="email" required><br>
+                    </div>
+                    <div class="input-group">
+                        <label class="sign-up-label" form="sign-up" for="username">Username</label><br>
+                        <input class="sign-up-input" form="sign-up" id="username" name="username" type="text"
+                            required><br>
+                    </div>
+                    <div class="input-group">
+                        <label class="sign-up-label" form="sign-up" for="password">Password</label><br>
+                        <input class="sign-up-input" form="sign-up" id="password" name="password" type="password"
+                            minlength="8" maxlength="50" required><br>
+                    </div>
+                    <div class="input-group">
+                        <label class="sign-up-label" form="sign-up" for="password">Confirm Password</label><br>
+                        <input class="sign-up-input" form="sign-up" id="confirm-password" name="confirmPassword"
+                            type="password" minlength="8" maxlength="50" required><br>
+                    </div>
+                    <input id="submit-button" type="submit" value="Sign Up">
+                </div>
+            </form>
+        </div>
+    </main>
+</body>
+
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Chat App</title>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.5, user-scalable=no" />
+    <link rel="stylesheet" type="text/css" href="/css/rooms.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+    <script src="/js/rooms.js" defer></script>
+</head>
+
+<body>
+    <header>
+        <nav>
+            <a id="landing-page" href="/">Chat App</a>
+        </nav>
+    </header>
+    <main>
+        <div id="chatrooms-wrapper">
+            <form id="new-chatroom" method="POST">
+                <input id="title" type="text" name="room-name" form="new-chatroom" />
+                <input id="create-chatroom" type="submit" value="New Chatroom" form="new-chatroom" />
+            </form>
+            <form id="connect-chatroom" method="POST">
+                <input id="chatroom-name" type="text" name="room-id" form="connect-chatroom" />
+                <input id="add-chatroom" type="submit" value="Add Chatroom" form="connect-chatroom" />
+            </form>
+            <div id="chatrooms">
+
+            </div>
+        </div>
+        <div id="chat-view-wrapper">
+            <div id="chat-view">
+
+            </div>
+            <div id="user-message-wrapper">
+                <input id="user-message" type="text" name="user-message" placeholder="type your message" />
+                <button id="send" name="send">Send</button>
+            </div>
+        </div>
+    </main>
+</body>
+
+</html>
