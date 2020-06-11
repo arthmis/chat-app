@@ -14,21 +14,25 @@
     <header>
         <nav>
             <a id="landing-page" href="/">Chat App</a>
+            <form id="logout" action="/logout" method="POST">
+                <input type="submit" value="Logout" form="logout">
+            </form>
         </nav>
     </header>
     <main>
         <div id="chatrooms-wrapper">
-            <form id="new-chatroom" method="POST">
+            <!-- <form id="new-chatroom" method="POST">
                 <input id="title" type="text" name="room-name" form="new-chatroom" />
                 <input id="create-chatroom" type="submit" value="New Chatroom" form="new-chatroom" />
-            </form>
-            <form id="connect-chatroom" method="POST">
+            </form> -->
+            <!-- <form id="connect-chatroom" method="POST">
                 <input id="chatroom-name" type="text" name="room-id" form="connect-chatroom" />
                 <input id="add-chatroom" type="submit" value="Add Chatroom" form="connect-chatroom" />
-            </form>
+            </form> -->
             <div id="chatrooms">
 
             </div>
+            <button id="new-chatroom">New Chatroom</button>
         </div>
         <div id="chat-view-wrapper">
             <div id="chat-view">
