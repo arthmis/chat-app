@@ -137,6 +137,7 @@ func main() {
 	router.Use(middleware.Logger)
 	router.Post("/signup", signup)
 	router.Post("/login", login)
+	router.With(validateUserSession).Post("/logout", logout)
 	router.With(validateUserSession).Get("/chat", chat)
 	router.Handle("/", http.FileServer(http.Dir("./frontend")))
 
@@ -161,6 +162,17 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 		fs := http.StripPrefix(pathPrefix, http.FileServer(root))
 		fs.ServeHTTP(w, r)
 	})
+}
+
+func logout(w http.ResponseWriter, req *http.Request) {
+	session, err := store.Get(req, "session-name")
+
+	session.Options.MaxAge = -1
+	if err = session.Save(req, w); err != nil {
+		log.Printf("Error deleting session: %v", err)
+	}
+
+	http.Redirect(w, req, "/", http.StatusSeeOther)
 }
 
 func signup(w http.ResponseWriter, req *http.Request) {
