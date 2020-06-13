@@ -43,6 +43,17 @@
                 <button id="send" name="send">Send</button>
             </div>
         </div>
+        <div id="new-chatroom-form-wrapper" class="visibility">
+            <form id="new-chatroom-form" action="/create-room" method="POST">
+                <p>Create your new chatroom</p>
+                <div class="input-group">
+                    <label for="chatroom-name">Chatroom Name</label>
+                    <input class="user-input" type="text" id="chatroom-name" name="chatroom_name"
+                        form="new-chatroom-form" placeholder="Unique Name" required>
+                </div>
+                <input type="submit" form="new-chatroom-form" id="new-chatroom-submit" value="Create">
+            </form>
+        </div>
     </main>
 </body>
 

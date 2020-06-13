@@ -3,27 +3,23 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
 	"html/template"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/gorilla/websocket"
 
+	"github.com/antonlindstrom/pgstore"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
-	"github.com/jackc/pgx/v4"
-
-	// "github.com/go-chi/render"
-	"github.com/antonlindstrom/pgstore"
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/schema"
+	"github.com/jackc/pgx/v4"
 
 	"github.com/gorilla/sessions"
 
@@ -35,7 +31,7 @@ import (
 
 const addr = ":8000"
 
-var clients = make(map[string]*websocket.Conn, 0)
+var clients = make(map[string]*User, 0)
 var decoder = schema.NewDecoder()
 
 type User struct {
@@ -49,21 +45,33 @@ const (
 	message = "message"
 )
 
-type UserMessage struct {
-	Message     string
-	MessageType string
-	Id          string
-	ChatroomId  string
-}
 type Message struct {
-	Message     string
-	MessageType string
-	Id          string
+	Message      string
+	MessageType  string
+	User         string
+	ChatroomName string
 }
 
 type Chatroom struct {
-	id    string
-	users []*websocket.Conn
+	id       string
+	users    []*User
+	messages []Message
+	channel  chan Message
+}
+
+func (room *Chatroom) run() {
+	for {
+		newMessage := <-room.channel
+		fmt.Printf("%v", newMessage)
+		room.messages = append(room.messages, newMessage)
+		bytes, err := json.Marshal(newMessage)
+		if err != nil {
+			log.Println(err)
+		}
+		for i := range room.users {
+			room.users[i].conn.WriteMessage(websocket.TextMessage, bytes)
+		}
+	}
 }
 
 type UserSignup struct {
@@ -80,12 +88,15 @@ type UserLogin struct {
 
 func NewChatroom() *Chatroom {
 	room := new(Chatroom)
-	room.id = string("test1")
-	room.users = make([]*websocket.Conn, 0)
+	room.id = ""
+	room.users = make([]*User, 0)
+	room.messages = make([]Message, 20)
+	room.channel = make(chan Message)
 	return room
 }
 
 var chatrooms = make(map[string]*Chatroom, 0)
+var chatroomChannels = make(map[string]chan Message, 0)
 
 // var db *pgxpool.Pool
 var db *sql.DB
@@ -140,6 +151,8 @@ func main() {
 	router.With(validateUserSession).Post("/logout", logout)
 	router.With(validateUserSession).Get("/chat", chat)
 	router.Handle("/", http.FileServer(http.Dir("./frontend")))
+	router.With(validateUserSession).Get("/ws", openWsConnection)
+	router.With(validateUserSession).Post("/create-room", createRoom)
 
 	FileServer(router, "/", http.Dir("./frontend"))
 	http.ListenAndServe(addr, router)
@@ -266,7 +279,6 @@ func validateUserSession(next http.Handler) http.Handler {
 			http.Redirect(w, req, "login", http.StatusSeeOther)
 			return
 		}
-		fmt.Printf("%+v\n", session)
 		next.ServeHTTP(w, req)
 	})
 }
@@ -316,6 +328,15 @@ func login(w http.ResponseWriter, req *http.Request) {
 		MaxAge:   60 * 60 * 24 * 7,
 		HttpOnly: true,
 	}
+
+	row = db.QueryRow(
+		`SELECT username FROM Users WHERE email=$1`,
+		form.Email,
+	)
+	var username string
+	err = row.Scan(&username)
+	session.Values["username"] = username
+
 	err = session.Save(req, w)
 	if err != nil {
 		log.Println(err)
@@ -358,46 +379,38 @@ func checkUserExists(ctx context.Context, dbpool *sql.DB, email string, username
 // TODO think about tracking users and the rooms they are a part of
 // track rooms and users that are authorized to use it
 func createRoom(writer http.ResponseWriter, req *http.Request) {
-	// err := req.ParseForm()
-	err := req.ParseMultipartForm(2 << 14)
+	err := req.ParseMultipartForm(50000)
 	if err != nil {
 		writer.WriteHeader(http.StatusNotFound)
 		log.Println("error parsing form")
+		return
 	}
 
-	room := Chatroom{}
-	keyBytes := make([]byte, 16)
-	if _, err := rand.Read(keyBytes); err != nil {
-		log.Println("error generating random bytes")
-	}
-
-	key := base64.StdEncoding.EncodeToString(keyBytes)
-	_, ok := chatrooms[key]
-
-	for ok == true {
-		keyBytes = make([]byte, 16)
-		if _, err := rand.Read(keyBytes); err != nil {
-			log.Println("error generating random bytes")
-		}
-
-		key = base64.StdEncoding.EncodeToString(keyBytes)
-		fmt.Println(key)
-	}
-	// chatrooms = append(chatrooms, &room)
-	room.id = key
-	// fmt.Println(key)
-	// fmt.Printf("%+v", chatrooms)
-	// fmt.Println("room: ", room)
-	chatrooms[key] = &room
-	// fmt.Printf("chatrooms: %+v\n", chatrooms)
-
-	resString, err := json.Marshal(fmt.Sprint(key))
+	session, err := store.Get(req, "session-name")
 	if err != nil {
-		log.Println("err: ", err)
+		log.Println(err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	chatroom := NewChatroom()
+	chatroom.id = req.FormValue("chatroom_name")
+	chatroom.users = append(chatroom.users, clients[session.Values["username"].(string)])
+	chatroomChannels[chatroom.id] = chatroom.channel
+	chatrooms[chatroom.id] = chatroom
+
+	go chatroom.run()
+
+	chatroomNameEncoded, err := json.Marshal(chatroom.id)
+	if err != nil {
+		log.Println(err)
 	}
 
 	writer.WriteHeader(http.StatusAccepted)
-	writer.Write([]byte(resString))
+	_, err = writer.Write(chatroomNameEncoded)
+	if err != nil {
+		log.Println(err)
+	}
 }
 
 func connectToRoom(writer http.ResponseWriter, req *http.Request) {
@@ -408,14 +421,14 @@ func connectToRoom(writer http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	user := req.FormValue("user")
+	// user := req.FormValue("user")
 	chatroomName := req.FormValue("room-id")
 
-	chatroomUsers := chatrooms[chatroomName].users
+	// chatroomUsers := chatrooms[chatroomName].users
 	// _, ok := clients[user]
 	// if ok {
 	// chatroomUsers = append(chatroomUsers, clients[user])
-	chatrooms[chatroomName].users = append(chatroomUsers, clients[user])
+	// chatrooms[chatroomName].users = append(chatroomUsers, clients[user])
 	// }
 
 	// fmt.Println(chatroomName)
@@ -429,71 +442,51 @@ func connectToRoom(writer http.ResponseWriter, req *http.Request) {
 	writer.Write([]byte(chatroomId))
 }
 
-func openWSConnection(writer http.ResponseWriter, req *http.Request) {
+func openWsConnection(writer http.ResponseWriter, req *http.Request) {
 	upgrader := websocket.Upgrader{}
 	conn, err := upgrader.Upgrade(writer, req, nil)
 	if err != nil {
 		log.Fatalln("upgrade: ", err)
 	}
 
-	// generate random name for client
-	keyBytes := make([]byte, 16)
-	if _, err := rand.Read(keyBytes); err != nil {
-		log.Println("error generating random bytes")
+	session, err := store.Get(req, "session-name")
+	if err != nil {
+		log.Println(err)
 	}
+	clientName := session.Values["username"].(string)
 
-	key := base64.StdEncoding.EncodeToString(keyBytes)
-
-	tempMessage := Message{"here is your user id", id, key}
-	// fmt.Printf("%+v\n", tempMessage)
-	message, err := json.Marshal(tempMessage)
 	if err != nil {
 		log.Println("could not parse Message struct")
 	}
-	// fmt.Println("message: ", message)
-	conn.WriteMessage(websocket.TextMessage, message)
+	user := User{conn, clientName, make([]string, 0)}
+	clients[clientName] = &user
 
-	clients[key] = conn
-	// clients = append(clients, conn)
 	defer conn.Close()
 
 	for {
-		// messageType, message, err := conn.ReadMessage()
-		_, message, err := conn.ReadMessage()
+		messageType, message, err := conn.ReadMessage()
 
 		if err != nil {
 			log.Println("connection closed: ", err)
 			break
-		} else {
-			userMessage := UserMessage{}
-			err = json.Unmarshal([]byte(message), &userMessage)
-			// fmt.Printf("%+v\n", userMessage)
+		}
+		userMessage := Message{}
+		err = json.Unmarshal([]byte(message), &userMessage)
 
-			if err != nil {
-				log.Println("error json parsing user message: ", err)
-			}
-			// fmt.Println("message type: ", messageType)
-			// fmt.Println(string(message))
-			// fmt.Println("chatroomid: ", userMessage.ChatroomId)
-			// fmt.Printf("%+v\n", userMessage)
-			tempMessage := UserMessage{userMessage.Message, "message", userMessage.Id, userMessage.ChatroomId}
-			// fmt.Printf("%+v\n", tempMessage)
-			broadcastedMessage, err := json.Marshal(tempMessage)
-			if err != nil {
-				log.Println("could not parse Message struct")
-			}
-			// fmt.Println(message)
-			// fmt.Printf("%+v\n", chatrooms[userMessage.ChatroomId].users)
-			// for i := range chatrooms[userMessage.ChatroomId].users {
-			// 	fmt.Printf("%+v\n", chatrooms[userMessage.ChatroomId].users)
-			// 	chatrooms[userMessage.ChatroomId].users[i].WriteMessage(websocket.TextMessage, broadcastedMessage)
-			// }
-			for _, user := range chatrooms[userMessage.ChatroomId].users {
-				// fmt.Printf("%#+v\n", user)
-				user.WriteMessage(websocket.TextMessage, broadcastedMessage)
-			}
-			// conn.WriteMessage(websocket.TextMessage, broadcastedMessage)
+		if err != nil {
+			log.Println("error json parsing user message: ", err)
+			break
+		}
+
+		fmt.Println("message type: ", messageType)
+		fmt.Println("client name: ", clientName)
+		fmt.Printf("%+v\n", userMessage)
+		fmt.Printf("%+v\n", chatroomChannels[userMessage.ChatroomName])
+		chatroomChannels[userMessage.ChatroomName] <- userMessage
+		if err != nil {
+			log.Println("could not parse Message struct")
+			break
 		}
 	}
-	delete(clients, key)
+	delete(clients, clientName)
 }
