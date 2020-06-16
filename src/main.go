@@ -52,6 +52,10 @@ type Message struct {
 	ChatroomName string
 }
 
+type ChatroomUser struct {
+	name string
+	conn *websocket.Conn
+}
 type Chatroom struct {
 	id       string
 	users    []*User
@@ -395,6 +399,7 @@ func createRoom(writer http.ResponseWriter, req *http.Request) {
 
 	chatroom := NewChatroom()
 	chatroom.id = req.FormValue("chatroom_name")
+	clients[session.Values["username"].(string)].chatrooms = append(clients[session.Values["username"].(string)].chatrooms, chatroom.id)
 	chatroom.users = append(chatroom.users, clients[session.Values["username"].(string)])
 	chatroomChannels[chatroom.id] = chatroom.channel
 	chatrooms[chatroom.id] = chatroom

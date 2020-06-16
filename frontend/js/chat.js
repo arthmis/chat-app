@@ -1,13 +1,21 @@
 const url = "ws://localhost:8000/ws";
 const webSocket = new WebSocket(url);
-// const chatView = document.getElementById("chat-view");
-// const chatrooms = document.getElementById("chatrooms");
+const chatView = document.getElementById("chat-view");
+const chatrooms = document.getElementById("chatrooms");
 // const connectChatroom = document.getElementById("connect-chatroom");
 
 let username = "art";
-let activeChatroom = "";
-// let userChatrooms = new Map();
+let activeChatroomName = "";
+let activeChatroom = null;
+let userChatrooms = new Map();
+const chatviewContent = null;
 
+class Chatroom {
+  constructor(name, view) {
+    this.name = name;
+    this.view = view;
+  }
+}
 // function registerClient() {
 //   const formData = new FormData();
 //   formData.append("user", anonymousName);
@@ -55,8 +63,36 @@ function main() {
     });
 
     let data = await res.json();
-    activeChatroom = data;
+    activeChatroomName = data;
+    userChatrooms[activeChatroomName] = activeChatroomName;
+    newChatroomFormWrapper.classList.toggle("visibility");
 
+    if (activeChatroom !== null) {
+      activeChatroom.classList.toggle("active-chatroom");
+      chatrooms[activeChatroom.textContent].view.hidden = true;
+    }
+
+    activeChatroom = document.createElement("div");
+    activeChatroom.appendChild(document.createTextNode(activeChatroomName));
+    activeChatroom.classList.add("chatroom-name", "active-chatroom");
+
+    activeChatroom.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (activeChatroom !== null) {
+        activeChatroom.classList.toggle("active-chatroom");
+        chatrooms[activeChatroom.textContent].view.hidden = true;
+      }
+      activeChatroom = event.target;
+      activeChatroom.classList.toggle("active-chatroom");
+      chatViewContent = chatrooms[event.target.textContent];
+      chatViewContent.view.hidden = false;
+    });
+    chatrooms.appendChild(activeChatroom);
+
+    const newView = document.createElement("div");
+    newView.classList.add("chat-view");
+    chatrooms[data] = new Chatroom(data, newView);
+    chatView.appendChild(newView);
 
   });
 
@@ -89,7 +125,7 @@ function main() {
     webSocket.send(JSON.stringify({
       message: userMessage.value,
       messageType: "text",
-      chatroomName: activeChatroom,
+      chatroomName: activeChatroom.textContent,
       user: username,
     }));
     userMessage.value = "";
@@ -98,16 +134,11 @@ function main() {
   webSocket.addEventListener("message", (messageJson) => {
     const message = JSON.parse(messageJson.data);
 
-    console.log("message: ", message);
-
-    if (message.MessageType === "message") {
-      console.log("message", message.Message);
-      const messageNode = document.createElement("p");
+    if (messageJson.type === "message") {
+      const messageNode = document.createElement("div");
       messageNode.appendChild(document.createTextNode(message.Message));
       messageNode.classList.add("chat-bubble");
-      chatView.appendChild(messageNode);
-    } else if (message.MessageType === "id") {
-      username = message.Id;
+      chatrooms[message.ChatroomName].view.appendChild(messageNode);
     }
   })
 

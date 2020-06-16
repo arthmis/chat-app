@@ -6,6 +6,7 @@
 
 html, body {
     width: 100%;
+    height: 100%;
     font-size: 16px;
     margin: 0;
     padding: 0;
@@ -53,7 +54,7 @@ main {
     width: 100%;
     display: flex;
     background-color: var(--main-bg-color);
-    min-height: calc(100vh - 4em);
+    height: calc(100% - 4em);
 }
 
 #chatrooms-wrapper {
@@ -62,12 +63,14 @@ main {
     min-width: 20ch;
     max-width: 30ch;
     width: 100%;
-    min-height: 100%;
+    height: 100%;
     background-color: #34353a;
 }
 
 #chatrooms {
-    min-height: calc(100% - 5em - 1em);
+    /* min-height: calc(100% - 5em - 1em); */
+    height: calc(100% - 5em - 1em);
+    overflow-y: auto;
     width: 100%;
 }
 #new-chatroom {
@@ -87,12 +90,15 @@ main {
 
 #chat-view-wrapper {
     width: 100%;
-    min-height: 100%;
+    height: 100%;
 }
 #chat-view {
-    min-height: calc(100% - 3.5em);
+    /* min-height: calc(100vh - 3.5em - 3.5em);
+    max-height: calc(100vh - 3.5em - 3.5em); */
+    height: calc(100% - 3.5em);
     font-size: 1.2em;
     font-family: "Open Sans";
+    overflow-y: auto;
 }
 #user-message-wrapper {
     display: flex;
@@ -179,4 +185,45 @@ main {
     border: none;
     border-bottom: 3px solid #bbbbbb;
     background-color: #e6e6e6;
+}
+
+.chatroom-name {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.2em;
+    width: 100%;
+    height: 3em;
+    color: var(--main-font-color);
+}
+
+.chatroom-name:hover {
+    background-color: #62646d;
+    cursor: default;
+}
+
+.active-chatroom {
+    background-color: #485177;
+}
+
+.chat-view {
+    width: 100%;
+    height: 100%;
+    font-size: 1em;
+    font-family: "Open Sans";
+    overflow-y: auto;
+}
+
+.chat-bubble {
+    padding-top: 0.3em;
+    padding-bottom: 0.3em;
+    margin-left: 0.5em;
+    margin-right: 0.5em;
+    min-width: 30ch;
+    max-width: 90ch;
+    width: calc(100% - 1em);
+    word-wrap: break-word;
+    color: var(--main-font-color);
+
+
 }
