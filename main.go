@@ -83,6 +83,8 @@ func main() {
 		)`,
 	)
 
+	go removeExpiredInvites(auth.Db, time.Minute*10)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Problem creating database table: %v\n", err)
 	}
@@ -123,6 +125,27 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 		fs := http.StripPrefix(pathPrefix, http.FileServer(root))
 		fs.ServeHTTP(w, r)
 	})
+}
+
+// TODO add channel that would allow breaking out of this function
+// might be necessary
+func removeExpiredInvites(db *sql.DB, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+
+	defer func() {
+		ticker.Stop()
+	}()
+
+	for {
+		select {
+
+		case <-ticker.C:
+			_, err := db.Exec("DELETE FROM Invites WHERE expires < now()")
+			if err != nil {
+				log.Printf("Unable to delete invites: %v", err)
+			}
+		}
+	}
 }
 
 // TODO check to see if the user is actually a part of the chatroom
@@ -342,7 +365,7 @@ func openWsConnection(writer http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Println("could not parse Message struct")
 	}
-	user := chatroom.User{conn, clientName, make([]string, 0)}
+	user := chatroom.User{Conn: conn, Id: clientName, Chatrooms: make([]string, 0)}
 	clients[clientName] = &user
 
 	defer conn.Close()
