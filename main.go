@@ -13,14 +13,18 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/jackc/pgx/stdlib"
 
 	"github.com/antonlindstrom/pgstore"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 
 	// "github.com/jackc/pgx/v4/pgxpool"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
+	"github.com/scylladb/gocqlx/v2"
 
 	"chat/auth"
 	"chat/chatroom"
@@ -41,6 +45,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading .env file:\n", err)
 	}
+	spew.Dump(chatroomChannels)
 
 	auth.Tmpl, err = template.New("templates").ParseGlob("templates/*.html")
 	if err != nil {
@@ -83,10 +88,16 @@ func main() {
 		)`,
 	)
 
-	go removeExpiredInvites(auth.Db, time.Minute*10)
-
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Problem creating database table: %v\n", err)
+	}
+
+	go removeExpiredInvites(auth.Db, time.Minute*10)
+
+	cluster := gocql.NewCluster("9042")
+	session, err := gocqlx.WrapSession(cluster.CreateSession())
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	router := chi.NewRouter()
@@ -140,9 +151,19 @@ func removeExpiredInvites(db *sql.DB, interval time.Duration) {
 		select {
 
 		case <-ticker.C:
-			_, err := db.Exec("DELETE FROM Invites WHERE expires < now()")
+			conn, err := stdlib.AcquireConn(db)
+			if err != nil {
+				log.Println("err acquiring pgx connection: \n", err)
+			}
+
+			_, err = conn.Exec("DELETE FROM Invites WHERE expires < now()")
 			if err != nil {
 				log.Printf("Unable to delete invites: %v", err)
+			}
+
+			err = stdlib.ReleaseConn(db, conn)
+			if err != nil {
+				log.Println("err releasing pgx connection:\n", err)
 			}
 		}
 	}

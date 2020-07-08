@@ -59,7 +59,7 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 	}
 	fmt.Println(string(hash))
 
-	emailExists, usernameExists := checkUserExists(req.Context(), Db, form.Email, form.Username)
+	emailExists, usernameExists := checkUserExists(req.Context(), form.Email, form.Username)
 
 	userExists := struct {
 		username       string
@@ -178,18 +178,24 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	http.Redirect(w, req, "/chat", http.StatusSeeOther)
 }
 
-func checkUserExists(ctx context.Context, dbpool *sql.DB, email string, username string) (emailExists, usernameExists bool) {
-	row := dbpool.QueryRow(
+func checkUserExists(ctx context.Context, email string, username string) (emailExists, usernameExists bool) {
+	conn, _ := stdlib.AcquireConn(Db)
+	row := conn.QueryRow(
+		// row := Db.QueryRow(
+		ctx,
 		`SELECT email FROM Users WHERE email=$1`,
 		email,
 	)
-
-	err := row.Scan(&email)
+	var test string
+	err := row.Scan(&test)
+	fmt.Println(test)
 	emailExists = true
 	if err == pgx.ErrNoRows {
 		emailExists = false
 	}
-	row = dbpool.QueryRow(
+	row = conn.QueryRow(
+		// row = Db.QueryRow(
+		ctx,
 		`SELECT username FROM Users WHERE username=$1`,
 		username,
 	)
