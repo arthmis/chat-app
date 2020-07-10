@@ -19,9 +19,9 @@ var messageMetaData = table.Metadata{
 var chatroomTable = table.New(messageMetaData)
 
 type Message struct {
-	UserId      string
-	MessageText string
-	Datetime    time.Time
+	UserId      string    `db:"user_id"`
+	MessageText string    `db:"message_text"`
+	Datetime    time.Time `db:"datetime"`
 }
 
 func main() {
@@ -70,12 +70,15 @@ func main() {
 	}
 
 	storedMessage := Message{UserId: "art", MessageText: "", Datetime: time.Now()}
-	// query = session.Query(stmt, names).BindStruct(storedMessage)
-	// query = session.Query(
-	// 	chatroomTable.SelectBuilder().AllowFiltering().Limit(1).Where(qb.ContainsNamed("user_id", "art")).ToCql(),
-	// )
-	query = session.Query(`SELECT * FROM chatroom WHERE user_id = ? LIMIT 1`, []string{"art"})
-	if err := query.Iter().StructOnly().Get(&storedMessage); err != nil {
+	// stmt, names := chatroomTable.SelectBuilder().AllowFiltering().Where(qb.ContainsNamed("user_id", "art")).Limit(1).ToCql()
+	// spew.Dump(stmt)
+	// spew.Dump(names)
+	// query = session.Query(`SELECT * FROM chatroom WHERE user_id=? AND message_text=? LIMIT 1 ALLOW FILTERING `, nil)
+	query = session.Query(`SELECT * FROM chatroom WHERE user_id=? AND message_text=? LIMIT 1 ALLOW FILTERING `, []string{"user_id", "message_text"})
+	// must Bind values in order to use in statement
+	query.Bind("art", "Hello World")
+	err = query.GetRelease(&storedMessage)
+	if err != nil {
 		spew.Dump(err)
 		return
 	}
