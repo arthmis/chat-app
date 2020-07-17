@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/jackc/pgx/stdlib"
+	"github.com/sony/sonyflake"
 
 	"github.com/antonlindstrom/pgstore"
 	"github.com/go-chi/chi"
@@ -33,12 +33,14 @@ import (
 
 const addr = ":8000"
 
-var clients = make(map[string]*chatroom.User, 0)
+var clients = make(map[string]*chatroom.User)
 
-var chatrooms = make(map[string]*chatroom.Chatroom, 0)
-var chatroomChannels = make(map[string]chan chatroom.Message, 0)
+var chatrooms = make(map[string]*chatroom.Chatroom)
+var chatroomChannels = make(map[string]chan chatroom.UserMessage)
 
 // var db *pgxpool.Pool
+var snowflake *sonyflake.Sonyflake
+var scyllaSession gocqlx.Session
 
 func main() {
 	err := godotenv.Load()
@@ -94,10 +96,36 @@ func main() {
 
 	go removeExpiredInvites(auth.Db, time.Minute*10)
 
-	cluster := gocql.NewCluster("9042")
-	session, err := gocqlx.WrapSession(cluster.CreateSession())
+	// creating scylla cluster
+	cluster := gocql.NewCluster("127.0.0.1")
+	cluster.Keyspace = "chatserver"
+	scyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Failed to wrap new cluster session: ", err)
+	}
+
+	err = scyllaSession.ExecStmt(
+		`CREATE TABLE IF NOT EXISTS messages(
+			chatroom_name TEXT,
+			user_id TEXT,
+			content TEXT,
+			message_id bigint,
+			PRIMARY KEY (chatroom_name, message_id)
+		) WITH CLUSTERING ORDER BY (message_id DESC)`,
+	)
+	if err != nil {
+		log.Fatal("Create chatrooms error: ", err)
+	}
+
+	// this will generate unique ids for each message on this
+	// particular server instance
+	snowflake = sonyflake.NewSonyflake(
+		sonyflake.Settings{
+			StartTime: time.Unix(0, 0),
+		},
+	)
+	if err != nil {
+		log.Fatal("Create messages store error:", err)
 	}
 
 	router := chi.NewRouter()
@@ -151,19 +179,9 @@ func removeExpiredInvites(db *sql.DB, interval time.Duration) {
 		select {
 
 		case <-ticker.C:
-			conn, err := stdlib.AcquireConn(db)
-			if err != nil {
-				log.Println("err acquiring pgx connection: \n", err)
-			}
-
-			_, err = conn.Exec("DELETE FROM Invites WHERE expires < now()")
+			_, err := db.Exec("DELETE FROM Invites WHERE expires < now()")
 			if err != nil {
 				log.Printf("Unable to delete invites: %v", err)
-			}
-
-			err = stdlib.ReleaseConn(db, conn)
-			if err != nil {
-				log.Println("err releasing pgx connection:\n", err)
 			}
 		}
 	}
@@ -320,16 +338,18 @@ func createRoom(writer http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	chatroom := chatroom.NewChatroom()
-	chatroom.Id = req.FormValue("chatroom_name")
-	clients[session.Values["username"].(string)].Chatrooms = append(clients[session.Values["username"].(string)].Chatrooms, chatroom.Id)
-	chatroom.Users = append(chatroom.Users, clients[session.Values["username"].(string)])
-	chatroomChannels[chatroom.Id] = chatroom.Channel
-	chatrooms[chatroom.Id] = chatroom
+	room := chatroom.NewChatroom()
+	room.Id = req.FormValue("chatroom_name")
+	room.Snowflake = snowflake
+	room.ScyllaSession = &scyllaSession
+	clients[session.Values["username"].(string)].Chatrooms = append(clients[session.Values["username"].(string)].Chatrooms, room.Id)
+	room.Users = append(room.Users, clients[session.Values["username"].(string)])
+	chatroomChannels[room.Id] = room.Channel
+	chatrooms[room.Id] = room
 
-	go chatroom.Run()
+	go room.Run()
 
-	chatroomNameEncoded, err := json.Marshal(chatroom.Id)
+	chatroomNameEncoded, err := json.Marshal(room.Id)
 	if err != nil {
 		log.Println(err)
 	}
@@ -398,8 +418,10 @@ func openWsConnection(writer http.ResponseWriter, req *http.Request) {
 			log.Println("connection closed: ", err)
 			break
 		}
-		userMessage := chatroom.Message{}
+		userMessage := chatroom.UserMessage{}
 		err = json.Unmarshal([]byte(message), &userMessage)
+		// TODO: Figure out why user that is sent is "art" and not appropriate user
+		userMessage.User = clientName
 
 		if err != nil {
 			log.Println("error json parsing user message: ", err)
@@ -408,8 +430,9 @@ func openWsConnection(writer http.ResponseWriter, req *http.Request) {
 
 		fmt.Println("message type: ", messageType)
 		fmt.Println("client name: ", clientName)
-		fmt.Printf("%+v\n", userMessage)
-		fmt.Printf("%+v\n", chatroomChannels[userMessage.ChatroomName])
+		fmt.Println()
+		// fmt.Printf("%+v\n", userMessage)
+		// fmt.Printf("%+v\n", chatroomChannels[userMessage.ChatroomName])
 		chatroomChannels[userMessage.ChatroomName] <- userMessage
 		if err != nil {
 			log.Println("could not parse Message struct")

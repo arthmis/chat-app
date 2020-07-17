@@ -13,8 +13,6 @@ require (
 	github.com/gorilla/schema v1.1.0
 	github.com/gorilla/sessions v1.2.0
 	github.com/gorilla/websocket v1.4.2
-	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
-	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jackc/pgx/v4 v4.6.0
 	github.com/joho/godotenv v1.3.0
 	github.com/leodido/go-urn v1.2.0 // indirect
@@ -22,6 +20,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/scylladb/gocqlx v1.5.0
 	github.com/scylladb/gocqlx/v2 v2.1.0
+	github.com/sony/sonyflake v1.0.0
 	golang.org/x/crypto v0.0.0-20200604202706-70a84ac30bf9
 	golang.org/x/net v0.0.0-20200602114024-627f9648deb9 // indirect
 	gopkg.in/go-playground/assert.v1 v1.2.1 // indirect
