@@ -46,7 +46,6 @@ function main() {
     event.preventDefault();
 
     const formData = new FormData(connectChatroom);
-    formData.append("user", anonymousName);
 
     const jsonPayload = await fetch("/connect-room", {
       method: "POST",
@@ -72,7 +71,6 @@ function main() {
       message: userMessage.value,
       messageType: "text",
       chatroomId: activeChatroom,
-      id: anonymousName,
     }));
     // console.log(`sent message ${userMessage.value}`);
     userMessage.value = "";
@@ -89,8 +87,6 @@ function main() {
       messageNode.appendChild(document.createTextNode(message.Message));
       messageNode.classList.add("chat-bubble");
       chatView.appendChild(messageNode);
-    } else if (message.MessageType === "id") {
-      anonymousName = message.Id;
     }
   })
 

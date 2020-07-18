@@ -42,31 +42,28 @@ var chatroomChannels = make(map[string]chan chatroom.UserMessage)
 var snowflake *sonyflake.Sonyflake
 var scyllaSession gocqlx.Session
 
-func main() {
+func init() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file:\n", err)
+		log.Fatal("Error loading .env file: ", err)
 	}
-	spew.Dump(chatroomChannels)
 
 	auth.Tmpl, err = template.New("templates").ParseGlob("templates/*.html")
 	if err != nil {
-		log.Println(err)
-		return
+		log.Fatal("Error instantiating templates: ", err)
 	}
 
 	// dbpool, err = pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	auth.Db, err = sql.Open("pgx", os.Getenv("DATABASE_URL"))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
-		os.Exit(1)
-	}
-	auth.Store, err = pgstore.NewPGStoreFromPool(auth.Db, []byte(os.Getenv("SESSION_SECRET")))
-	if err != nil {
-		log.Println(err)
-		os.Exit(1)
+		log.Fatal("Unable to connect to database: ", err)
 	}
 	defer auth.Db.Close()
+
+	auth.Store, err = pgstore.NewPGStoreFromPool(auth.Db, []byte(os.Getenv("SESSION_SECRET")))
+	if err != nil {
+		log.Fatal("Error creating session store using postgres: ", err)
+	}
 
 	_, err = auth.Db.Exec(
 		`CREATE TABLE IF NOT EXISTS Users (
@@ -78,7 +75,7 @@ func main() {
 	)
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Problem creating database table: %v\n", err)
+		log.Fatal("Problem creating database table: ", err)
 	}
 
 	_, err = auth.Db.Exec(
@@ -91,7 +88,7 @@ func main() {
 	)
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Problem creating database table: %v\n", err)
+		log.Fatal("Problem creating database table: ", err)
 	}
 
 	go removeExpiredInvites(auth.Db, time.Minute*10)
@@ -114,7 +111,7 @@ func main() {
 		) WITH CLUSTERING ORDER BY (message_id DESC)`,
 	)
 	if err != nil {
-		log.Fatal("Create chatrooms error: ", err)
+		log.Fatal("Create messages store error:", err)
 	}
 
 	// this will generate unique ids for each message on this
@@ -124,9 +121,9 @@ func main() {
 			StartTime: time.Unix(0, 0),
 		},
 	)
-	if err != nil {
-		log.Fatal("Create messages store error:", err)
-	}
+}
+
+func main() {
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
@@ -361,35 +358,6 @@ func createRoom(writer http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func connectToRoom(writer http.ResponseWriter, req *http.Request) {
-	err := req.ParseMultipartForm(10000000)
-	if err != nil {
-		log.Println("error parsing form", err)
-		writer.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	// user := req.FormValue("user")
-	chatroomName := req.FormValue("room-id")
-
-	// chatroomUsers := chatrooms[chatroomName].users
-	// _, ok := clients[user]
-	// if ok {
-	// chatroomUsers = append(chatroomUsers, clients[user])
-	// chatrooms[chatroomName].users = append(chatroomUsers, clients[user])
-	// }
-
-	// fmt.Println(chatroomName)
-
-	writer.WriteHeader(http.StatusAccepted)
-	chatroomId, err := json.Marshal(fmt.Sprint(chatroomName))
-	if err != nil {
-		writer.WriteHeader(http.StatusInternalServerError)
-		log.Println("error parsing chatroomName")
-	}
-	writer.Write([]byte(chatroomId))
-}
-
 func openWsConnection(writer http.ResponseWriter, req *http.Request) {
 	upgrader := websocket.Upgrader{}
 	conn, err := upgrader.Upgrade(writer, req, nil)
@@ -397,19 +365,19 @@ func openWsConnection(writer http.ResponseWriter, req *http.Request) {
 		log.Fatalln("upgrade: ", err)
 	}
 
+	defer conn.Close()
+
 	session, err := auth.Store.Get(req, "session-name")
 	if err != nil {
 		log.Println(err)
 	}
 	clientName := session.Values["username"].(string)
 
-	if err != nil {
-		log.Println("could not parse Message struct")
-	}
+	// if err != nil {
+	// 	log.Println("could not parse Message struct")
+	// }
 	user := chatroom.User{Conn: conn, Id: clientName, Chatrooms: make([]string, 0)}
 	clients[clientName] = &user
-
-	defer conn.Close()
 
 	for {
 		messageType, message, err := conn.ReadMessage()
@@ -419,20 +387,18 @@ func openWsConnection(writer http.ResponseWriter, req *http.Request) {
 			break
 		}
 		userMessage := chatroom.UserMessage{}
-		err = json.Unmarshal([]byte(message), &userMessage)
-		// TODO: Figure out why user that is sent is "art" and not appropriate user
-		userMessage.User = clientName
 
+		err = json.Unmarshal([]byte(message), &userMessage)
 		if err != nil {
 			log.Println("error json parsing user message: ", err)
 			break
 		}
 
+		userMessage.User = clientName
+
 		fmt.Println("message type: ", messageType)
-		fmt.Println("client name: ", clientName)
+		spew.Dump(userMessage)
 		fmt.Println()
-		// fmt.Printf("%+v\n", userMessage)
-		// fmt.Printf("%+v\n", chatroomChannels[userMessage.ChatroomName])
 		chatroomChannels[userMessage.ChatroomName] <- userMessage
 		if err != nil {
 			log.Println("could not parse Message struct")
