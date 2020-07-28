@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -12,8 +11,6 @@ import (
 	"github.com/go-playground/validator"
 	"github.com/gorilla/schema"
 	"github.com/gorilla/sessions"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/stdlib"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -37,27 +34,33 @@ type UserLogin struct {
 
 func Signup(w http.ResponseWriter, req *http.Request) {
 	var form UserSignup
-	req.ParseMultipartForm(50000)
-	err := Decoder.Decode(&form, req.PostForm)
+	err := req.ParseForm()
 	if err != nil {
-		log.Println(err)
+		log.Println("Error parsing form: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = Decoder.Decode(&form, req.PostForm)
+	if err != nil {
+		log.Println("err decoding form in signup: ", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	fmt.Printf("%+v\n", form)
-
 	err = Validate.Struct(form)
 	if err != nil {
-		log.Println(err)
+		log.Println("err validating form in signup: ", err)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(form.Password), bcrypt.MinCost)
 	if err != nil {
-		log.Println(err)
+		log.Println("err generating from password: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	fmt.Println(string(hash))
 
 	emailExists, usernameExists := checkUserExists(req.Context(), form.Email, form.Username)
 
@@ -73,7 +76,6 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 		"Email already exists",
 	}
 
-	fmt.Println(emailExists, usernameExists)
 	// TODO COMPLETE THIS AND ACTUALLY IMPLEMENT THE TEMPLATES
 	if usernameExists && emailExists {
 		w.WriteHeader(http.StatusOK)
@@ -94,16 +96,16 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	conn, err := stdlib.AcquireConn(Db)
 	if err == nil {
-		conn.Exec(
-			req.Context(),
+		_, err = Db.Exec(
 			`INSERT INTO Users (email, username, password) VALUES ($1, $2, $3)`,
 			form.Email,
 			form.Username,
 			string(hash),
 		)
-		stdlib.ReleaseConn(Db, conn)
+		if err != nil {
+			log.Println("error inserting new user: ", err)
+		}
 	} else {
 		log.Println("error inserting values: \n", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -116,14 +118,17 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 
 func Login(w http.ResponseWriter, req *http.Request) {
 	var form UserLogin
-	err := req.ParseMultipartForm(50000)
+	err := req.ParseForm()
 	if err != nil {
-		log.Println(err)
+		log.Println("err parsing form data: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
+
 	err = Decoder.Decode(&form, req.PostForm)
 	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Println("err decoding post form: ", err)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -134,7 +139,8 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	var password string
 	err = row.Scan(&password)
 	if err != nil {
-		// email is not available
+		// email is not available or db is not available
+		log.Println("err getting password hash: ", err)
 		w.WriteHeader(http.StatusOK)
 		Tmpl.ExecuteTemplate(w, "login.html", nil)
 		return
@@ -151,7 +157,7 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	session, err := Store.New(req, "session-name")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Println(err)
+		log.Println("error creating new unsaved session: ", err)
 		return
 	}
 	session.Options = &sessions.Options{
@@ -166,11 +172,17 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	)
 	var username string
 	err = row.Scan(&username)
+	if err != nil {
+		log.Println("err scanning row: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
 	session.Values["username"] = username
 
 	err = session.Save(req, w)
 	if err != nil {
-		log.Println(err)
+		log.Println("error saving session to db: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -179,30 +191,24 @@ func Login(w http.ResponseWriter, req *http.Request) {
 }
 
 func checkUserExists(ctx context.Context, email string, username string) (emailExists, usernameExists bool) {
-	conn, _ := stdlib.AcquireConn(Db)
-	row := conn.QueryRow(
-		// row := Db.QueryRow(
-		ctx,
+	row := Db.QueryRow(
 		`SELECT email FROM Users WHERE email=$1`,
 		email,
 	)
 	var test string
 	err := row.Scan(&test)
-	fmt.Println(test)
 	emailExists = true
-	if err == pgx.ErrNoRows {
+	if err != nil {
 		emailExists = false
 	}
-	row = conn.QueryRow(
-		// row = Db.QueryRow(
-		ctx,
+	row = Db.QueryRow(
 		`SELECT username FROM Users WHERE username=$1`,
 		username,
 	)
 
 	err = row.Scan(&username)
 	usernameExists = true
-	if err == pgx.ErrNoRows {
+	if err != nil {
 		usernameExists = false
 	}
 
@@ -211,10 +217,17 @@ func checkUserExists(ctx context.Context, email string, username string) (emailE
 
 func Logout(w http.ResponseWriter, req *http.Request) {
 	session, err := Store.Get(req, "session-name")
+	if err != nil {
+		log.Println("err getting session name: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	session.Options.MaxAge = -1
 	if err = session.Save(req, w); err != nil {
-		log.Printf("Error deleting session: %v", err)
+		log.Println("Error deleting session: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	http.Redirect(w, req, "/", http.StatusSeeOther)
@@ -225,7 +238,7 @@ func UserSession(next http.Handler) http.Handler {
 		session, err := Store.Get(req, "session-name")
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			log.Println(err)
+			log.Println("error getting session: ", err)
 			return
 		}
 		if session.IsNew {

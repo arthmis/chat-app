@@ -9,17 +9,19 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/stdlib"
 	"github.com/sony/sonyflake"
 
 	"github.com/antonlindstrom/pgstore"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 
-	// "github.com/jackc/pgx/v4/pgxpool"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gocql/gocql"
 	"github.com/google/uuid"
@@ -38,31 +40,35 @@ var clients = make(map[string]*chatroom.User)
 var chatrooms = make(map[string]*chatroom.Chatroom)
 var chatroomChannels = make(map[string]chan chatroom.UserMessage)
 
-// var db *pgxpool.Pool
 var snowflake *sonyflake.Sonyflake
 var scyllaSession gocqlx.Session
 
 func init() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file: ", err)
+		log.Fatalln("Error loading .env file: ", err)
 	}
 
 	auth.Tmpl, err = template.New("templates").ParseGlob("templates/*.html")
 	if err != nil {
-		log.Fatal("Error instantiating templates: ", err)
+		log.Fatalln("Error instantiating templates: ", err)
 	}
 
-	// dbpool, err = pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
-	auth.Db, err = sql.Open("pgx", os.Getenv("DATABASE_URL"))
+	dbPort, err := strconv.ParseUint(os.Getenv("DB_PORT"), 10, 16)
 	if err != nil {
-		log.Fatal("Unable to connect to database: ", err)
+		log.Fatalln("Failed to convert db port from environment variable to int: ", err)
 	}
-	defer auth.Db.Close()
+	auth.Db = stdlib.OpenDB(pgx.ConnConfig{
+		Host:     os.Getenv("DB_HOST"),
+		Port:     uint16(dbPort),
+		Database: os.Getenv("DATABASE"),
+		User:     os.Getenv("DB_USER"),
+		Password: os.Getenv("DB_PASSWORD"),
+	})
 
 	auth.Store, err = pgstore.NewPGStoreFromPool(auth.Db, []byte(os.Getenv("SESSION_SECRET")))
 	if err != nil {
-		log.Fatal("Error creating session store using postgres: ", err)
+		log.Fatalln("Error creating session store using postgres: ", err)
 	}
 
 	_, err = auth.Db.Exec(
@@ -75,7 +81,7 @@ func init() {
 	)
 
 	if err != nil {
-		log.Fatal("Problem creating database table: ", err)
+		log.Fatalln("Problem creating Users table: ", err)
 	}
 
 	_, err = auth.Db.Exec(
@@ -88,17 +94,17 @@ func init() {
 	)
 
 	if err != nil {
-		log.Fatal("Problem creating database table: ", err)
+		log.Fatalln("Problem creating Invites table: ", err)
 	}
 
 	go removeExpiredInvites(auth.Db, time.Minute*10)
 
 	// creating scylla cluster
 	cluster := gocql.NewCluster("127.0.0.1")
-	cluster.Keyspace = "chatserver"
+	cluster.Keyspace = os.Getenv("KEYSPACE")
 	scyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
 	if err != nil {
-		log.Fatal("Failed to wrap new cluster session: ", err)
+		log.Fatalln("Failed to wrap new cluster session: ", err)
 	}
 
 	err = scyllaSession.ExecStmt(
@@ -111,7 +117,7 @@ func init() {
 		) WITH CLUSTERING ORDER BY (message_id DESC)`,
 	)
 	if err != nil {
-		log.Fatal("Create messages store error:", err)
+		log.Fatalln("Create messages store error:", err)
 	}
 
 	// this will generate unique ids for each message on this
@@ -124,10 +130,13 @@ func init() {
 }
 
 func main() {
+	defer auth.Db.Close()
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
+	// add validation middleware
 	router.Post("/signup", auth.Signup)
+	// add validation middleware
 	router.Post("/login", auth.Login)
 	router.With(auth.UserSession).Post("/logout", auth.Logout)
 	router.With(auth.UserSession).Get("/chat", chat)
@@ -141,7 +150,10 @@ func main() {
 	router.With(auth.UserSession).Post("/create-invite", createInvite)
 
 	FileServer(router, "/", http.Dir("./frontend"))
-	http.ListenAndServe(addr, router)
+	err := http.ListenAndServe(addr, router)
+	if err != nil {
+		log.Fatalln("error starting server: ", err)
+	}
 }
 
 func FileServer(r chi.Router, path string, root http.FileSystem) {
@@ -187,21 +199,22 @@ func removeExpiredInvites(db *sql.DB, interval time.Duration) {
 // TODO check to see if the user is actually a part of the chatroom
 // before they are allowed to create an invite
 func createInvite(w http.ResponseWriter, req *http.Request) {
-	err := req.ParseMultipartForm(50000)
+	err := req.ParseForm()
 	if err != nil {
-		log.Println(err)
+		log.Println("error parsing form for create invite: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	roomName := req.FormValue("chatroom_name")
+	now := time.Now()
 	// timeLimit := req.FormValue("invite_timelimit")
 	inviteTimeLimit := time.Time{}
 	forever := 0.0
 	switch timeLimit := req.FormValue("invite_timelimit"); timeLimit {
 	case "1 day":
-		inviteTimeLimit = time.Now().Add(time.Hour * 24)
+		inviteTimeLimit = now.Add(time.Hour * 24)
 	case "1 week":
-		inviteTimeLimit = time.Now().Add(time.Hour * 24 * 7)
+		inviteTimeLimit = now.Add(time.Hour * 24 * 7)
 	case "Forever":
 		forever = math.Inf(1)
 	default:
@@ -213,12 +226,10 @@ func createInvite(w http.ResponseWriter, req *http.Request) {
 		}
 		return
 	}
-	log.Println(roomName)
-	// log.Println(timeLimit)
 
 	inviteCodeUUID, err := uuid.NewRandom()
 	if err != nil {
-		log.Println(err)
+		log.Println("error creating random uuid: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -233,7 +244,7 @@ func createInvite(w http.ResponseWriter, req *http.Request) {
 			"infinity",
 		)
 		if err != nil {
-			log.Println(err)
+			log.Println("error inserting invite into invites table: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -245,7 +256,7 @@ func createInvite(w http.ResponseWriter, req *http.Request) {
 			inviteTimeLimit,
 		)
 		if err != nil {
-			log.Println(err)
+			log.Println("error inserting invite into invites table: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -257,20 +268,22 @@ func createInvite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
-	w.Write(encodedInviteCode)
+	_, err = w.Write(encodedInviteCode)
+	if err != nil {
+		log.Println("Error writing invite code in response: ", err)
+	}
 
 }
 
 // add validation for this endpoint
 func joinRoom(writer http.ResponseWriter, req *http.Request) {
-	err := req.ParseMultipartForm(50000)
+	err := req.ParseForm()
 	if err != nil {
-		log.Println(err)
+		log.Println("error parsing form: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 	}
 
 	inviteCode := req.FormValue("invite_code")
-	// fmt.Println(inviteCode)
 
 	row := auth.Db.QueryRow(
 		`SELECT chatroom, expires FROM Invites WHERE invite=$1`,
@@ -282,16 +295,19 @@ func joinRoom(writer http.ResponseWriter, req *http.Request) {
 	// before allowing user to use it
 	var inviteExpiration string
 	err = row.Scan(&chatroomName, &inviteExpiration)
-	if err != nil {
-		log.Println(err)
+	if err == sql.ErrNoRows {
+		log.Println("invite not found: ", err)
+		writer.WriteHeader(http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Println("err scanning row: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	// fmt.Printf("\n\n chatroom: %+v \nexpire: %+v \n\n", chatroomName, inviteExpiration)
 
 	session, err := auth.Store.Get(req, "session-name")
 	if err != nil {
-		log.Println(err)
+		log.Println("err getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -310,7 +326,8 @@ func joinRoom(writer http.ResponseWriter, req *http.Request) {
 	writer.WriteHeader(http.StatusAccepted)
 	_, err = writer.Write(name)
 	if err != nil {
-		log.Println(err)
+		log.Println("error writing chatroom name in response: ", err)
+		return
 	}
 }
 
@@ -319,19 +336,25 @@ func chat(w http.ResponseWriter, req *http.Request) {
 }
 
 // TODO think about tracking users and the rooms they are a part of
-// track rooms and users that are authorized to use it
 func createRoom(writer http.ResponseWriter, req *http.Request) {
-	err := req.ParseMultipartForm(50000)
+	err := req.ParseForm()
 	if err != nil {
-		writer.WriteHeader(http.StatusNotFound)
-		log.Println("error parsing form")
+		log.Println("error parsing form: ", err)
+		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	session, err := auth.Store.Get(req, "session-name")
 	if err != nil {
-		log.Println(err)
+		log.Println("error getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	roomName := req.FormValue("chatroom_name")
+	err = auth.Validate.Var(roomName, "lt=30,gt=3,alphanumeric")
+	if err != nil {
+		log.Println("chatroom name was not valid: ", err)
+		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -354,7 +377,8 @@ func createRoom(writer http.ResponseWriter, req *http.Request) {
 	writer.WriteHeader(http.StatusAccepted)
 	_, err = writer.Write(chatroomNameEncoded)
 	if err != nil {
-		log.Println(err)
+		log.Println("error writing chatroom name in response: ", err)
+		return
 	}
 }
 
@@ -362,21 +386,26 @@ func openWsConnection(writer http.ResponseWriter, req *http.Request) {
 	upgrader := websocket.Upgrader{}
 	conn, err := upgrader.Upgrade(writer, req, nil)
 	if err != nil {
-		log.Fatalln("upgrade: ", err)
+		log.Println("upgrade error: ", err)
 	}
 
 	defer conn.Close()
 
 	session, err := auth.Store.Get(req, "session-name")
 	if err != nil {
-		log.Println(err)
+		log.Println("err getting session name: ", err)
 	}
 	clientName := session.Values["username"].(string)
 
 	// if err != nil {
 	// 	log.Println("could not parse Message struct")
 	// }
-	user := chatroom.User{Conn: conn, Id: clientName, Chatrooms: make([]string, 0)}
+	// TODO: function that retrieves chatrooms user is part of and joins them
+	user := chatroom.User{
+		Conn:      conn,
+		Id:        clientName,
+		Chatrooms: make([]string, 0),
+	}
 	clients[clientName] = &user
 
 	for {
@@ -401,7 +430,7 @@ func openWsConnection(writer http.ResponseWriter, req *http.Request) {
 		fmt.Println()
 		chatroomChannels[userMessage.ChatroomName] <- userMessage
 		if err != nil {
-			log.Println("could not parse Message struct")
+			log.Println("could not parse Message struct: ", err)
 			break
 		}
 	}

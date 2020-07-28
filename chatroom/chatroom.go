@@ -43,8 +43,9 @@ type ChatroomUser struct {
 	Conn *websocket.Conn
 }
 type Chatroom struct {
-	Id            string
-	Users         []*User
+	Id    string
+	Users []*User
+	// get rid of messages field, not necessary
 	Messages      []UserMessage
 	Channel       chan UserMessage
 	ScyllaSession *gocqlx.Session
@@ -57,14 +58,17 @@ func (room *Chatroom) Run() {
 		room.Messages = append(room.Messages, newMessage)
 		err := room.saveMessage(newMessage)
 		if err != nil {
-			log.Println(err)
+			log.Println("error saving message: ", err)
 		}
 		bytes, err := json.Marshal(newMessage)
 		if err != nil {
 			log.Println(err)
 		}
 		for i := range room.Users {
-			room.Users[i].Conn.WriteMessage(websocket.TextMessage, bytes)
+			err = room.Users[i].Conn.WriteMessage(websocket.TextMessage, bytes)
+			if err != nil {
+				log.Println("error writing message to user ws connection: ", err)
+			}
 		}
 	}
 }
