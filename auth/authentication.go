@@ -65,10 +65,10 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 	emailExists, usernameExists := checkUserExists(req.Context(), form.Email, form.Username)
 
 	userExists := struct {
-		username       string
-		email          string
-		usernameExists string
-		emailExists    string
+		Username       string
+		Email          string
+		UsernameExists string
+		EmailExists    string
 	}{
 		form.Username,
 		form.Email,
@@ -79,19 +79,28 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 	// TODO COMPLETE THIS AND ACTUALLY IMPLEMENT THE TEMPLATES
 	if usernameExists && emailExists {
 		w.WriteHeader(http.StatusOK)
-		Tmpl.ExecuteTemplate(w, "signup.html", userExists)
+		err = Tmpl.ExecuteTemplate(w, "signup.html", userExists)
+		if err != nil {
+			log.Println("error executing template: ", err)
+		}
 
 		return
 	} else if usernameExists {
-		userExists.email = ""
+		userExists.EmailExists = ""
 		w.WriteHeader(http.StatusOK)
-		Tmpl.ExecuteTemplate(w, "signup.html", userExists)
+		err = Tmpl.ExecuteTemplate(w, "signup.html", userExists)
+		if err != nil {
+			log.Println("error executing template: ", err)
+		}
 
 		return
 	} else if emailExists {
-		userExists.username = ""
+		userExists.UsernameExists = ""
 		w.WriteHeader(http.StatusOK)
-		Tmpl.ExecuteTemplate(w, "signup.html", userExists)
+		err = Tmpl.ExecuteTemplate(w, "signup.html", userExists)
+		if err != nil {
+			log.Println("error executing template: ", err)
+		}
 
 		return
 	}
@@ -113,7 +122,10 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusAccepted)
-	Tmpl.ExecuteTemplate(w, "login.html", nil)
+	err = Tmpl.ExecuteTemplate(w, "login.html", nil)
+	if err != nil {
+		log.Println("error executing template: ", err)
+	}
 }
 
 func Login(w http.ResponseWriter, req *http.Request) {
@@ -132,17 +144,32 @@ func Login(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	loginSuccess := struct {
+		Email        string
+		ErrorMessage string
+	}{
+		form.Email,
+		"Email or Password is incorrect",
+	}
+
 	row := Db.QueryRow(
 		`SELECT password FROM Users WHERE email=$1`,
 		form.Email,
 	)
+
 	var password string
 	err = row.Scan(&password)
-	if err != nil {
-		// email is not available or db is not available
-		log.Println("err getting password hash: ", err)
+	if err == sql.ErrNoRows {
 		w.WriteHeader(http.StatusOK)
-		Tmpl.ExecuteTemplate(w, "login.html", nil)
+
+		err = Tmpl.ExecuteTemplate(w, "login.html", loginSuccess)
+		if err != nil {
+			log.Println("error executing template: ", err)
+		}
+		return
+	} else if err != nil {
+		log.Println("err getting password hash: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -150,7 +177,10 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	// password did not match
 	if err != nil {
 		w.WriteHeader(http.StatusOK)
-		Tmpl.ExecuteTemplate(w, "login.html", nil)
+		err = Tmpl.ExecuteTemplate(w, "login.html", loginSuccess)
+		if err != nil {
+			log.Println("error executing template: ", err)
+		}
 		return
 	}
 
@@ -166,6 +196,7 @@ func Login(w http.ResponseWriter, req *http.Request) {
 		HttpOnly: true,
 	}
 
+	// todo: combine this with search for password to get username and password
 	row = Db.QueryRow(
 		`SELECT username FROM Users WHERE email=$1`,
 		form.Email,
