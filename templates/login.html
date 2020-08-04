@@ -25,11 +25,17 @@
             <form id="login" action="/login" method="post">
                 <div id="form-inputs">
                     <div class="input-group">
-                        <label class="login-label" form="login" for="email">Email</label><br>
-                        <input class="login-input" form="login" id="email" name="email" type="email" required><br>
+                        <div class="label-and-unavailable">
+                            <label class="login-label" form="login" for="email">Email</label><br>
+                            <span class="unavailable">{{.ErrorMessage}}</span>
+                        </div>
+                        <input class="login-input" value={{.Email}} form="login" id="email" name="email" type="email" required><br>
                     </div>
                     <div class="input-group">
-                        <label class="login-label" form="login" for="password">Password</label><br>
+                        <div class="label-and-unavailable">
+                            <label class="login-label" value="" form="login" for="password">Password</label><br>
+                            <span class="unavailable">{{.ErrorMessage}}</span>
+                        </div>
                         <input class="login-input" form="login" id="password" name="password" type="password"
                             minlength="8" maxlength="50" required><br>
                     </div>
