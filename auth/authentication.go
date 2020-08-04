@@ -76,7 +76,6 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 		"Email already exists",
 	}
 
-	// TODO COMPLETE THIS AND ACTUALLY IMPLEMENT THE TEMPLATES
 	if usernameExists && emailExists {
 		w.WriteHeader(http.StatusOK)
 		err = Tmpl.ExecuteTemplate(w, "signup.html", userExists)
