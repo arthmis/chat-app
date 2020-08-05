@@ -39,10 +39,10 @@ jobs:
     - name: Build chat app
       run: go build main.go 
 
-  # test:
-  #   runs-on: ubuntu-18.04
-  #   needs: [build]
-  #   steps:
-  #     - name: testing code
-  #       run: go test ./...
+  test:
+    runs-on: ubuntu-18.04
+    needs: [build]
+    steps:
+      - name: testing code
+        run: go test ./...
 
