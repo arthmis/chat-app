@@ -33,7 +33,12 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: github_actions
+          POSTGRES_DB: chat-app 
+          DB_PORT: 5432
+          DB_HOST: localhost
+          DB_PASSWORD: postgres
+          SESSION_SECRET: sessionsecret
+          KEYSPACE: chatserver
         ports: 
           - 5432:5432
         options: >- 
@@ -47,5 +52,5 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v2
       - name: testing code
-        run: go test -race ./...
+        run: go test ./...
 

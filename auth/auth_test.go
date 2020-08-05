@@ -29,7 +29,7 @@ var scyllaSession gocqlx.Session
 func init() {
 	err := godotenv.Load("../.env")
 	if err != nil {
-		log.Fatalln("Error loading .env file: ", err)
+		log.Println("Error loading .env file: ", err)
 	}
 
 	Tmpl, err = template.New("templates").ParseGlob("../templates/*.html")
@@ -44,9 +44,9 @@ func init() {
 	Db = stdlib.OpenDB(pgx.ConnConfig{
 		Host:     os.Getenv("DB_HOST"),
 		Port:     uint16(dbPort),
-		Database: os.Getenv("DATABASE"),
-		User:     os.Getenv("DB_USER"),
-		Password: os.Getenv("DB_PASSWORD"),
+		Database: os.Getenv("POSTGRES_DB"),
+		User:     os.Getenv("POSTGRES_USER"),
+		Password: os.Getenv("POSTGRES_PASSWORD"),
 	})
 
 	Store, err = pgstore.NewPGStoreFromPool(Db, []byte(os.Getenv("SESSION_SECRET")))
