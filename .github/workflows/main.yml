@@ -43,6 +43,9 @@ jobs:
           --health-retries 5
     needs: [build]
     steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - name: Check out repository
+        uses: actions/checkout@v2
       - name: testing code
         run: go test -race ./...
 
