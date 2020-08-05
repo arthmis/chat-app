@@ -6,7 +6,7 @@ name: CI
 # events but only for the master branch
 on:
   push:
-    branches: [ master ]
+    branches: [ master, ci-testing ]
   pull_request:
     branches: [ master ]
 
@@ -17,34 +17,28 @@ jobs:
     # The type of runner that the job will run on
     runs-on: ubuntu-18.04
 
+    services:
+      postgres:
+        image: postgres:10.12
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: github_actions
+        ports: 
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timout 5s --health-retries 5
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - name: Check out repository
     - uses: actions/checkout@v2
-    - name: Setup PostgreSQL
-      uses: Harmon758/postgresql-action@v1.0.0
-      with:
-        # Version of PostgreSQL to use
-        postgresql version: 10.12 # optional, default is latest
-        # POSTGRES_DB - name for the default database that is created
-        postgresql db: test_db # optional, default is 
-        # POSTGRES_USER - create the specified user with superuser power
-        postgresql user: chatty # optional, default is 
-        # POSTGRES_PASSWORD - superuser password
-        postgresql password: postgres # optional, default is 
-    # Runs a single command using the runners shell
     - name: Build chat app
       run: go build main.go 
 
-    # Runs a set of commands using the runners shell
-    # - name: Run a multi-line script
-    #   run: |
-    #     echo Add other actions to build,
-    #     echo test, and deploy your project.
-  test:
-    runs-on: ubuntu-18.04
-    needs: [build]
-    steps:
-      - name: testing code
-        run: go test ./...
+  # test:
+  #   runs-on: ubuntu-18.04
+  #   needs: [build]
+  #   steps:
+  #     - name: testing code
+  #       run: go test ./...
 
