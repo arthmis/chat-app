@@ -48,18 +48,18 @@ jobs:
           --health-retries 5
     needs: [build]
     steps:
-      env:
-        POSTGRES_USER: postgres
-        POSTGRES_PASSWORD: postgres
-        POSTGRES_DB: chat-app 
-        DB_PORT: 5432
-        DB_HOST: localhost
-        DB_PASSWORD: postgres
-        SESSION_SECRET: sessionsecret
-        KEYSPACE: chatserver
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Check out repository
         uses: actions/checkout@v2
       - name: testing code
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: chat-app 
+          DB_PORT: 5432
+          DB_HOST: localhost
+          DB_PASSWORD: postgres
+          SESSION_SECRET: sessionsecret
+          KEYSPACE: chatserver
         run: go test ./...
 
