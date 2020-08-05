@@ -27,18 +27,18 @@ jobs:
 
   test:
     runs-on: ubuntu-18.04
+    env:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: chat-app 
+      DB_PORT: 5432
+      DB_HOST: localhost
+      DB_PASSWORD: postgres
+      SESSION_SECRET: sessionsecret
+      KEYSPACE: chatserver
     services:
       postgres:
         image: postgres:10.12
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: chat-app 
-          DB_PORT: 5432
-          DB_HOST: localhost
-          DB_PASSWORD: postgres
-          SESSION_SECRET: sessionsecret
-          KEYSPACE: chatserver
         ports: 
           - 5432:5432
         options: >- 
