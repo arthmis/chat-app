@@ -17,6 +17,16 @@ jobs:
     # The type of runner that the job will run on
     runs-on: ubuntu-18.04
 
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - name: Check out repository
+      uses: actions/checkout@v2
+    - name: Build chat app
+      run: go build main.go 
+
+  test:
+    runs-on: ubuntu-18.04
     services:
       postgres:
         image: postgres:10.12
@@ -31,16 +41,6 @@ jobs:
           --health-interval 10s 
           --health-timeout 5s 
           --health-retries 5
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-    - name: Check out repository
-      uses: actions/checkout@v2
-    - name: Build chat app
-      run: go build main.go 
-
-  test:
-    runs-on: ubuntu-18.04
     needs: [build]
     steps:
       - name: testing code
