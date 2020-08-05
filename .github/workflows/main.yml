@@ -44,5 +44,5 @@ jobs:
     needs: [build]
     steps:
       - name: testing code
-        run: go test ./...
+        run: go test -race ./...
 
