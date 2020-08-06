@@ -51,6 +51,8 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Check out repository
         uses: actions/checkout@v2
+      - name: Testing custom action
+        uses: arthmis/scylladb-github-action
       - name: testing code
         env:
           POSTGRES_USER: postgres
