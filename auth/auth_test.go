@@ -10,12 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/antonlindstrom/pgstore"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
-	"github.com/gocql/gocql"
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/stdlib"
 	"github.com/joho/godotenv"
@@ -81,33 +79,33 @@ func init() {
 	}
 
 	// creating scylla cluster
-	cluster := gocql.NewCluster("127.0.0.1")
-	cluster.Keyspace = os.Getenv("KEYSPACE")
-	scyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
-	if err != nil {
-		log.Fatalln("Failed to wrap new cluster session: ", err)
-	}
+	// cluster := gocql.NewCluster("127.0.0.1")
+	// cluster.Keyspace = os.Getenv("KEYSPACE")
+	// scyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
+	// if err != nil {
+	// 	log.Fatalln("Failed to wrap new cluster session: ", err)
+	// }
 
-	err = scyllaSession.ExecStmt(
-		`CREATE TABLE IF NOT EXISTS messages(
-			chatroom_name TEXT,
-			user_id TEXT,
-			content TEXT,
-			message_id bigint,
-			PRIMARY KEY (chatroom_name, message_id)
-		) WITH CLUSTERING ORDER BY (message_id DESC)`,
-	)
-	if err != nil {
-		log.Fatalln("Create messages store error:", err)
-	}
+	// err = scyllaSession.ExecStmt(
+	// 	`CREATE TABLE IF NOT EXISTS messages(
+	// 		chatroom_name TEXT,
+	// 		user_id TEXT,
+	// 		content TEXT,
+	// 		message_id bigint,
+	// 		PRIMARY KEY (chatroom_name, message_id)
+	// 	) WITH CLUSTERING ORDER BY (message_id DESC)`,
+	// )
+	// if err != nil {
+	// 	log.Fatalln("Create messages store error:", err)
+	// }
 
-	// this will generate unique ids for each message on this
-	// particular server instance
-	snowflake = sonyflake.NewSonyflake(
-		sonyflake.Settings{
-			StartTime: time.Unix(0, 0),
-		},
-	)
+	// // this will generate unique ids for each message on this
+	// // particular server instance
+	// snowflake = sonyflake.NewSonyflake(
+	// 	sonyflake.Settings{
+	// 		StartTime: time.Unix(0, 0),
+	// 	},
+	// )
 }
 
 func newRouter() *chi.Mux {
