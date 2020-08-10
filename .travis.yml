@@ -10,14 +10,15 @@ env:
         - POSTGRES_USER=chat
         - POSTGRES_PASSWORD=postgres
         - SESSION_SECRET=sessionsecret
-        - KEYSPACE=chatserve
+        - KEYSPACE=chatserver
+        # - PG_PORT=5432
     
 
 services:
     - postgresql
 
 addons:
-    postgresql: "10.12"
+    postgresql: "10"
     
 before_script:
     - psql -c 'create database test_ci;' -U postgres
