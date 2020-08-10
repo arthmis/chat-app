@@ -26,4 +26,4 @@ addons:
 before_script:
     - psql -c 'CREATE ROLE chat WITH SUPERUSER CREATEDB LOGIN;' -U postgres
     - psql -c 'CREATE DATABASE chat;' -U postgres 
-    - psql -c 'CREATE DATABASE test_ci;' -U chat 
+    - psql -c 'CREATE DATABASE chat-app;' -U chat 
