@@ -1,6 +1,9 @@
 language: go
 go:
     - 1.14.x
+
+dist: bionic
+
 env:
     global:
         - GO111MODULE=on
@@ -21,5 +24,5 @@ addons:
     postgresql: "10"
     
 before_script:
-    - psql -c 'CREATE ROLE chat WITH LOGIN;'
+    - psql -c 'CREATE ROLE chat WITH CREATEDB LOGIN;'
     - psql -c 'CREATE DATABASE test_ci;' -U chat 
