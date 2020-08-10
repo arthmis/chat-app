@@ -136,7 +136,7 @@ func TestSignup(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	status := res.Code
-	if status != http.StatusOK {
+	if status != http.StatusCreated {
 		t.Errorf("handle returned wrong status code: got %v want %v\n", status, http.StatusOK)
 	}
 }
