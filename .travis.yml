@@ -4,6 +4,8 @@ go:
 
 dist: bionic
 
+# sudo: required
+
 env:
     global:
         - GO111MODULE=on
@@ -24,6 +26,12 @@ addons:
     postgresql: "10"
     
 before_script:
+    - sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 5e08fbd8b5d6ec9c
+    - sudo curl -o /etc/apt/sources.list.d/scylla.list -L http://repositories.scylladb.com/scylla/repo/a6a13203-ab85-4771-a1d6-5edb5fecaf69/ubuntu/scylladb-4.1-bionic.list
+    - sudo apt-get update
+    - sudo apt-get install scylla -y
+    - sudo apt-get install -y openjdk-8-jre-headless
+    - sudo update-java-alternatives --jre-headless -s java-1.8.0-openjdk-amd64
     - psql -c 'CREATE ROLE chat WITH SUPERUSER CREATEDB LOGIN;' -U postgres
     - psql -c 'CREATE DATABASE chat;' -U postgres 
     - psql -c 'CREATE DATABASE "chat-app";' -U chat 
