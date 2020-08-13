@@ -35,7 +35,8 @@ before_script:
     # - sudo apt-get update
     # - sudo apt-get install -y openjdk-8-jre-headless
     # - sudo update-java-alternatives --jre-headless -s java-1.8.0-openjdk-amd64
-    - docker run --memory=2056m --cpus=2 --name some-scylla --hostname some-scylla -d scylladb/scylla --seeds="$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' some-scylla)"
+    # - docker run --memory=2056m --cpus=2 --name some-scylla --hostname some-scylla -d scylladb/scylla --seeds="$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' some-scylla)"
+    - docker run --name scylla -d scylladb/scylla --developer-mode 1 --memory 2G --smp 2 --listen-address 127.0.0.1 --overprovisioned 1 --seed 127.0.0.1 --broadcast-address 127.0.0.1
     - docker exec -it some-scylla nodetool status
     # - sudo scylla_setup --no-memory-setup --no-kernel-check --no-bootparam-setup --no-coredump-setup --no-ntp-setup --no-raid-setup --no-sysconfig-setup --no-io-setup --no-version-check --no-cpuscaling-setup --no-fstrim-setup
     # - sudo scylla_dev_mode_setup --developer-mode 1
