@@ -34,6 +34,7 @@ before_script:
     - sudo apt-get update
     - sudo apt-get install -y openjdk-8-jre-headless
     - sudo update-java-alternatives --jre-headless -s java-1.8.0-openjdk-amd64
+    - sudo scylla_setup
     - psql -c 'CREATE ROLE chat WITH SUPERUSER CREATEDB LOGIN;' -U postgres
     - psql -c 'CREATE DATABASE chat;' -U postgres 
     - psql -c 'CREATE DATABASE "chat-app";' -U chat 
