@@ -51,7 +51,7 @@ jobs:
                 go-version: 1.14.7
             - name: testing code
               run: |
-                psql -c 'CREATE ROLE chat WITH SUPERUSER CREATEDB LOGIN PASSWORD "postgres";' -U postgres -h localhost -p 5432 -w
+                psql -c 'CREATE ROLE chat WITH SUPERUSER CREATEDB LOGIN PASSWORD 'postgres';' -U postgres -h localhost -p 5432 -w
                 psql -c 'CREATE DATABASE chat;' -U postgres -h localhost -p 5432 -w
                 psql -c 'CREATE DATABASE "chat-app";' -U chat -h localhost -p 5432 -w
                 go test ./...
