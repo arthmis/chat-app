@@ -1,0 +1,50 @@
+name: Test
+
+on: 
+    push:
+        branches: [ travisCI ]
+        # branches: [ master ]
+    pull_request:
+        branches: [ master ]
+
+jobs:
+    test:
+        name: Test Code
+        runs-on: ubuntu-18.04
+
+        services:
+            postgres:
+                image: postgres:10.12
+                env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_DB: chat-app 
+                    POSTGRES_PORT: 5432
+                    POSTGRES_HOST: postgres 
+                    SESSION_SECRET: sessionsecret
+                    #   KEYSPACE: chatserver
+                ports: 
+                    - 5432:5432
+                options: >- 
+                    --health-cmd pg_isready 
+                    --health-interval 10s 
+                    --health-timeout 5s 
+                    --health-retries 5
+
+        cassandra:
+            image: cassandra
+            # ports:
+            #     - 7199:7199
+
+        steps:
+            - name: Check out respository Code
+              uses: actions/checkout@v2
+            - name: testing code
+            env:
+                POSTGRES_USER: postgres
+                POSTGRES_PASSWORD: postgres
+                POSTGRES_DB: chat-app 
+                POSTGRES_PORT: 5432
+                POSTGRES_HOST: postgres
+                SESSION_SECRET: sessionsecret
+            run: go test ./...

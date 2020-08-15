@@ -27,7 +27,6 @@ addons:
     postgresql: "10"
     
 before_script:
-
     - nodetool status
     - cqlsh -e "CREATE KEYSPACE IF NOT EXISTS chatserver WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 3};"
     - psql -c 'CREATE ROLE chat WITH SUPERUSER CREATEDB LOGIN;' -U postgres
