@@ -48,9 +48,13 @@ jobs:
             - name: Set up Go
               uses: actions/setup-go@v2
               with:
-                go-version: 1.14.4
+                go-version: 1.14.7
             - name: testing code
-              run: go test ./...
+              run: |
+                psql -c 'CREATE ROLE chat WITH SUPERUSER CREATEDB LOGIN;' -U postgres
+                psql -c 'CREATE DATABASE chat;' -U postgres 
+                psql -c 'CREATE DATABASE "chat-app";' -U chat 
+                go test ./...
               env:
                 POSTGRES_USER: chat
                 POSTGRES_PASSWORD: postgres
