@@ -34,20 +34,22 @@ jobs:
 
             cassandra:
                 image: cassandra
-                # ports:
-                #     - 7199:7199
+                ports:
+                    - 7199:7199
 
         steps:
+            - name: check cassandra
+              run: nodetool status
             - name: Set up Go
               uses: actions/setup-go@v1
               with:
-                go-version: 1.14
+                go-version: 1.14.4
             - name: Check out respository Code
               uses: actions/checkout@v2
             - name: testing code
               run: go test ./...
               env:
-                POSTGRES_USER: postgres
+                POSTGRES_USER: chat
                 POSTGRES_PASSWORD: postgres
                 POSTGRES_DB: chat-app 
                 POSTGRES_PORT: 5432
