@@ -21,7 +21,6 @@ env:
 
 services:
     - postgresql
-    - docker
     - cassandra
 
 addons:
