@@ -11,7 +11,7 @@ jobs:
     test:
         name: Test Code
         runs-on: ubuntu-18.04
-        container: bionic
+        container: ubuntu:18.04
 
         services:
             postgres:
