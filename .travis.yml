@@ -9,8 +9,8 @@ sudo: required
 env:
     global:
         - GO111MODULE=on
-        - DB_PORT=5432
-        - DB_HOST=localhost
+        - POSTGRES_PORT=5432
+        - POSTGRES_HOST=localhost
         - POSTGRES_DB=chat-app
         - POSTGRES_USER=chat
         - POSTGRES_PASSWORD=postgres
@@ -22,27 +22,15 @@ env:
 services:
     - postgresql
     - docker
+    - cassandra
 
 addons:
     postgresql: "10"
     
 before_script:
-    # - sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 5e08fbd8b5d6ec9c
-    # - sudo curl -o /etc/apt/sources.list.d/scylla.list -L http://repositories.scylladb.com/scylla/repo/a6a13203-ab85-4771-a1d6-5edb5fecaf69/ubuntu/scylladb-4.1-bionic.list
-    # - sudo apt-get update
-    # - sudo apt-get install scylla-jmx
-    # - sudo apt-get -y install scylla
-    # - sudo apt-get update
-    # - sudo apt-get install -y openjdk-8-jre-headless
-    # - sudo update-java-alternatives --jre-headless -s java-1.8.0-openjdk-amd64
-    # - docker run --memory=2056m --cpus=2 --name some-scylla --hostname some-scylla -d scylladb/scylla --seeds="$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' some-scylla)"
-    - docker run --name scylla -d scylladb/scylla --developer-mode 1 --memory 2G --smp 2 --listen-address 127.0.0.1 --overprovisioned 1 --seed 127.0.0.1 --broadcast-address 127.0.0.1
-    - docker exec -it scylla nodetool status
-    # - sudo scylla_setup --no-memory-setup --no-kernel-check --no-bootparam-setup --no-coredump-setup --no-ntp-setup --no-raid-setup --no-sysconfig-setup --no-io-setup --no-version-check --no-cpuscaling-setup --no-fstrim-setup
-    # - sudo scylla_dev_mode_setup --developer-mode 1
-    # - sudo /opt/scylladb/bin/scylla --memory 2G --smp 2 --overprovisioned
-    # - sleep 15
-    # - nodetool status
+
+    - nodetool status
+    - cqlsh -e "CREATE KEYSPACE IF NOT EXISTS chatserver WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 3};"
     - psql -c 'CREATE ROLE chat WITH SUPERUSER CREATEDB LOGIN;' -U postgres
     - psql -c 'CREATE DATABASE chat;' -U postgres 
     - psql -c 'CREATE DATABASE "chat-app";' -U chat 
