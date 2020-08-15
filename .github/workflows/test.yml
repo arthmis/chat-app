@@ -38,6 +38,9 @@ jobs:
                     - 7199:7199
                 options: >-
                     --health-cmd "nodetool status"
+                    --health-interval 10s 
+                    --health-timeout 5s 
+                    --health-retries 5
 
         steps:
             - name: Set up Go
