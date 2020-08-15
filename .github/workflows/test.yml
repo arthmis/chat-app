@@ -11,7 +11,7 @@ jobs:
     test:
         name: Test Code
         runs-on: ubuntu-18.04
-        container: ubuntu:18.04
+        # container: ubuntu:18.04
 
         services:
             postgres:
@@ -43,12 +43,12 @@ jobs:
                     --health-retries 5
 
         steps:
+            - name: Check out respository Code
+              uses: actions/checkout@v2
             - name: Set up Go
               uses: actions/setup-go@v2
               with:
                 go-version: 1.14.4
-            - name: Check out respository Code
-              uses: actions/checkout@v2
             - name: testing code
               run: go test ./...
               env:
