@@ -38,6 +38,10 @@ jobs:
                 #     - 7199:7199
 
         steps:
+            - name: Set up Go
+              uses: actions/setup-go@v1
+              with:
+                go-version: 1.14
             - name: Check out respository Code
               uses: actions/checkout@v2
             - name: testing code
