@@ -11,6 +11,7 @@ jobs:
     test:
         name: Test Code
         runs-on: ubuntu-18.04
+        container: bionic
 
         services:
             postgres:
@@ -31,10 +32,10 @@ jobs:
                     --health-timeout 5s 
                     --health-retries 5
 
-        cassandra:
-            image: cassandra
-            # ports:
-            #     - 7199:7199
+            cassandra:
+                image: cassandra
+                # ports:
+                #     - 7199:7199
 
         steps:
             - name: Check out respository Code
