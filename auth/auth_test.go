@@ -37,12 +37,12 @@ func init() {
 		log.Fatalln("Error instantiating templates: ", err)
 	}
 
-	dbPort, err := strconv.ParseUint(os.Getenv("DB_PORT"), 10, 16)
+	dbPort, err := strconv.ParseUint(os.Getenv("POSTGRES_PORT"), 10, 16)
 	if err != nil {
 		log.Fatalln("Failed to convert db port from environment variable to int: ", err)
 	}
 	Db = stdlib.OpenDB(pgx.ConnConfig{
-		Host:     os.Getenv("DB_HOST"),
+		Host:     os.Getenv("POSTGRES_HOST"),
 		Port:     uint16(dbPort),
 		Database: os.Getenv("POSTGRES_DB"),
 		User:     os.Getenv("POSTGRES_USER"),
