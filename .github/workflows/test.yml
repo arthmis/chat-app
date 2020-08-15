@@ -40,11 +40,11 @@ jobs:
             - name: Check out respository Code
               uses: actions/checkout@v2
             - name: testing code
-            env:
+              run: go test ./...
+              env:
                 POSTGRES_USER: postgres
                 POSTGRES_PASSWORD: postgres
                 POSTGRES_DB: chat-app 
                 POSTGRES_PORT: 5432
                 POSTGRES_HOST: postgres
                 SESSION_SECRET: sessionsecret
-            run: go test ./...
