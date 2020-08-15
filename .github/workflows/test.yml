@@ -62,3 +62,4 @@ jobs:
                 POSTGRES_PORT: 5432
                 POSTGRES_HOST: localhost 
                 SESSION_SECRET: sessionsecret
+                PGPASSWORD: postgres
