@@ -36,10 +36,10 @@ jobs:
                 image: cassandra
                 ports:
                     - 7199:7199
+                options: >-
+                    --health-cmd "nodetool status"
 
         steps:
-            - name: check cassandra
-              run: nodetool status
             - name: Set up Go
               uses: actions/setup-go@v1
               with:
