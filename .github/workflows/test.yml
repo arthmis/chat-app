@@ -56,10 +56,16 @@ jobs:
             #     psql -c 'CREATE DATABASE "chat-app";' -U chat -h localhost -p 5432 -w
             #     go test ./...
             - name: create chat role
+                env:
+                    PGPASSWORD: postgres
               run: psql -c "CREATE ROLE chat WITH SUPERUSER CREATEDB LOGIN PASSWORD 'postgres';" -U postgres -h localhost -p 5432 -w
             - name: create chat database 
+                env:
+                    PGPASSWORD: postgres
               run: psql -c 'CREATE DATABASE chat;' -U postgres -h localhost -p 5432 -w
             - name: create chat-app database 
+                env:
+                    PGPASSWORD: postgres
               run: psql -c 'CREATE DATABASE "chat-app";' -U chat -h localhost -p 5432 -w
               env:
                 POSTGRES_USER: chat
