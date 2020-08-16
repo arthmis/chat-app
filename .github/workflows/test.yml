@@ -16,14 +16,6 @@ jobs:
         services:
             postgres:
                 image: postgres:10.12
-                env:
-                    POSTGRES_USER: postgres
-                    POSTGRES_PASSWORD: postgres
-                    POSTGRES_DB: chat-app 
-                    POSTGRES_PORT: 5432
-                    POSTGRES_HOST: postgres 
-                    SESSION_SECRET: sessionsecret
-                    #   KEYSPACE: chatserver
                 ports: 
                     - 5432:5432
                 options: >- 
@@ -75,3 +67,12 @@ jobs:
             #     POSTGRES_HOST: localhost 
             #     SESSION_SECRET: sessionsecret
             #     PGPASSWORD: postgres
+
+                # env:
+                #     POSTGRES_USER: postgres
+                #     POSTGRES_PASSWORD: postgres
+                #     POSTGRES_DB: chat-app 
+                #     POSTGRES_PORT: 5432
+                #     POSTGRES_HOST: postgres 
+                #     SESSION_SECRET: sessionsecret
+                    #   KEYSPACE: chatserver
