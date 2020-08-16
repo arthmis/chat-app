@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -83,10 +84,29 @@ func init() {
 	// creating scylla cluster
 	cluster := gocql.NewCluster("127.0.0.1")
 	cluster.Keyspace = os.Getenv("KEYSPACE")
-	scyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
+	cqlSession, err := cluster.CreateSession()
 	if err != nil {
-		log.Fatalln("Failed to wrap new cluster session: ", err)
+		log.Fatalln("Failed to create cluster session: ", err)
 	}
+
+	createKeyspace := cqlSession.Query(
+		fmt.Sprintf(
+			`CREATE KEYSPACE %s
+				WITH replication = {
+					'class' : 'SimpleStrategy',
+					'replication_factor' : 3
+				}`,
+			cluster.Keyspace,
+		))
+	err = createKeyspace.Exec()
+	if err != nil {
+		log.Fatalln("Failed to create keyspace: ", err)
+	}
+
+	// scyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
+	// if err != nil {
+	// 	log.Fatalln("Failed to wrap new cluster session: ", err)
+	// }
 
 	err = scyllaSession.ExecStmt(
 		`CREATE TABLE IF NOT EXISTS messages(
