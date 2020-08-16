@@ -81,22 +81,15 @@ func init() {
 		log.Fatalln("Problem creating Invites table: ", err)
 	}
 
-	// creating scylla cluster
-	// cluster := gocql.NewCluster("127.0.0.1:9042")
-	cluster := gocql.NewCluster("localhost")
+	// creating cassandra cluster
+	tempCluster := gocql.NewCluster("localhost")
 	keyspace := os.Getenv("KEYSPACE")
-	// cluster.Keyspace = os.Getenv("KEYSPACE")
-	cqlSession, err := cluster.CreateSession()
+	cqlSession, err := tempCluster.CreateSession()
 	if err != nil {
 		log.Fatalln("Failed to create cluster session: ", err)
 	}
 
-	scyllaSession, err = gocqlx.WrapSession(cqlSession, err)
-	if err != nil {
-		log.Fatalln("Failed to wrap new cluster session: ", err)
-	}
-
-	createKeyspace := scyllaSession.Query(
+	createKeyspace := cqlSession.Query(
 		fmt.Sprintf(
 			`CREATE KEYSPACE IF NOT EXISTS %s
 				WITH replication = {
@@ -110,11 +103,12 @@ func init() {
 		log.Fatalln("Failed to create keyspace: ", err)
 	}
 
-	keyspaceMetaData, err := scyllaSession.KeyspaceMetadata(keyspace)
+	cluster := gocql.NewCluster("localhost")
+	cluster.Keyspace = keyspace
+	scyllaSession, err = gocqlx.WrapSession(cqlSession, err)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln("Failed to wrap new cluster session: ", err)
 	}
-	keyspaceMetaData.Name = os.Getenv("KEYSPACE")
 
 	err = scyllaSession.ExecStmt(
 		`CREATE TABLE IF NOT EXISTS messages(
