@@ -84,6 +84,7 @@ func init() {
 	// creating scylla cluster
 	// cluster := gocql.NewCluster("127.0.0.1:9042")
 	cluster := gocql.NewCluster("localhost")
+	keyspace := os.Getenv("KEYSPACE")
 	// cluster.Keyspace = os.Getenv("KEYSPACE")
 	cqlSession, err := cluster.CreateSession()
 	if err != nil {
@@ -108,6 +109,12 @@ func init() {
 	if err != nil {
 		log.Fatalln("Failed to create keyspace: ", err)
 	}
+
+	keyspaceMetaData, err := scyllaSession.KeyspaceMetadata(keyspace)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	keyspaceMetaData.Name = os.Getenv("KEYSPACE")
 
 	err = scyllaSession.ExecStmt(
 		`CREATE TABLE IF NOT EXISTS messages(
