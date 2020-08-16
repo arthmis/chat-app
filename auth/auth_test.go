@@ -96,12 +96,12 @@ func init() {
 
 	createKeyspace := scyllaSession.Query(
 		fmt.Sprintf(
-			`CREATE KEYSPACE %s
+			`CREATE KEYSPACE IF NOT EXISTS %s
 				WITH replication = {
 					'class' : 'SimpleStrategy',
 					'replication_factor' : 3
 				}`,
-			cluster.Keyspace,
+			os.Getenv("KEYSPACE"),
 		), nil)
 	err = createKeyspace.Exec()
 	if err != nil {
