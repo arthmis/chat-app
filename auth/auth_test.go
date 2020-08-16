@@ -105,7 +105,7 @@ func init() {
 
 	cluster := gocql.NewCluster("localhost")
 	cluster.Keyspace = keyspace
-	scyllaSession, err = gocqlx.WrapSession(cqlSession, err)
+	scyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
 	if err != nil {
 		log.Fatalln("Failed to wrap new cluster session: ", err)
 	}
