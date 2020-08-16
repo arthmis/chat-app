@@ -84,12 +84,17 @@ func init() {
 	// creating scylla cluster
 	cluster := gocql.NewCluster("127.0.0.1")
 	cluster.Keyspace = os.Getenv("KEYSPACE")
-	cqlSession, seshErr := cluster.CreateSession()
+	cqlSession, err := cluster.CreateSession()
 	if err != nil {
 		log.Fatalln("Failed to create cluster session: ", err)
 	}
 
-	createKeyspace := cqlSession.Query(
+	scyllaSession, err = gocqlx.WrapSession(cqlSession, err)
+	if err != nil {
+		log.Fatalln("Failed to wrap new cluster session: ", err)
+	}
+
+	createKeyspace := scyllaSession.Query(
 		fmt.Sprintf(
 			`CREATE KEYSPACE %s
 				WITH replication = {
@@ -101,11 +106,6 @@ func init() {
 	err = createKeyspace.Exec()
 	if err != nil {
 		log.Fatalln("Failed to create keyspace: ", err)
-	}
-
-	scyllaSession, err = gocqlx.WrapSession(cqlSession, seshErr)
-	if err != nil {
-		log.Fatalln("Failed to wrap new cluster session: ", err)
 	}
 
 	err = scyllaSession.ExecStmt(
