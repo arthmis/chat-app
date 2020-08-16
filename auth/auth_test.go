@@ -82,7 +82,8 @@ func init() {
 	}
 
 	// creating scylla cluster
-	cluster := gocql.NewCluster("127.0.0.1")
+	// cluster := gocql.NewCluster("127.0.0.1:9042")
+	cluster := gocql.NewCluster("localhost")
 	cluster.Keyspace = os.Getenv("KEYSPACE")
 	cqlSession, err := cluster.CreateSession()
 	if err != nil {
