@@ -67,11 +67,11 @@ jobs:
               env:
                 PGPASSWORD: postgres
               run: psql -c 'CREATE DATABASE "chat-app";' -U chat -h localhost -p 5432 -w
-              env:
-                POSTGRES_USER: chat
-                POSTGRES_PASSWORD: postgres
-                POSTGRES_DB: chat-app 
-                POSTGRES_PORT: 5432
-                POSTGRES_HOST: localhost 
-                SESSION_SECRET: sessionsecret
-                PGPASSWORD: postgres
+            #   env:
+            #     POSTGRES_USER: chat
+            #     POSTGRES_PASSWORD: postgres
+            #     POSTGRES_DB: chat-app 
+            #     POSTGRES_PORT: 5432
+            #     POSTGRES_HOST: localhost 
+            #     SESSION_SECRET: sessionsecret
+            #     PGPASSWORD: postgres
