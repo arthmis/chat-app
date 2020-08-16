@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -93,19 +94,19 @@ func init() {
 		log.Fatalln("Failed to wrap new cluster session: ", err)
 	}
 
-	// createKeyspace := scyllaSession.Query(
-	// 	fmt.Sprintf(
-	// 		`CREATE KEYSPACE %s
-	// 			WITH replication = {
-	// 				'class' : 'SimpleStrategy',
-	// 				'replication_factor' : 3
-	// 			}`,
-	// 		cluster.Keyspace,
-	// 	), nil)
-	// err = createKeyspace.Exec()
-	// if err != nil {
-	// 	log.Fatalln("Failed to create keyspace: ", err)
-	// }
+	createKeyspace := scyllaSession.Query(
+		fmt.Sprintf(
+			`CREATE KEYSPACE %s
+				WITH replication = {
+					'class' : 'SimpleStrategy',
+					'replication_factor' : 3
+				}`,
+			cluster.Keyspace,
+		), nil)
+	err = createKeyspace.Exec()
+	if err != nil {
+		log.Fatalln("Failed to create keyspace: ", err)
+	}
 
 	// err = scyllaSession.ExecStmt(
 	// 	`CREATE TABLE IF NOT EXISTS messages(
