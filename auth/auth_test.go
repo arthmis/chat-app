@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/antonlindstrom/pgstore"
 	"github.com/go-chi/chi"
@@ -108,26 +109,26 @@ func init() {
 		log.Fatalln("Failed to create keyspace: ", err)
 	}
 
-	// err = scyllaSession.ExecStmt(
-	// 	`CREATE TABLE IF NOT EXISTS messages(
-	// 		chatroom_name TEXT,
-	// 		user_id TEXT,
-	// 		content TEXT,
-	// 		message_id bigint,
-	// 		PRIMARY KEY (chatroom_name, message_id)
-	// 	) WITH CLUSTERING ORDER BY (message_id DESC)`,
-	// )
-	// if err != nil {
-	// 	log.Fatalln("Create messages store error:", err)
-	// }
+	err = scyllaSession.ExecStmt(
+		`CREATE TABLE IF NOT EXISTS messages(
+			chatroom_name TEXT,
+			user_id TEXT,
+			content TEXT,
+			message_id bigint,
+			PRIMARY KEY (chatroom_name, message_id)
+		) WITH CLUSTERING ORDER BY (message_id DESC)`,
+	)
+	if err != nil {
+		log.Fatalln("Create messages store error:", err)
+	}
 
-	// // this will generate unique ids for each message on this
-	// // particular server instance
-	// snowflake = sonyflake.NewSonyflake(
-	// 	sonyflake.Settings{
-	// 		StartTime: time.Unix(0, 0),
-	// 	},
-	// )
+	// this will generate unique ids for each message on this
+	// particular server instance
+	snowflake = sonyflake.NewSonyflake(
+		sonyflake.Settings{
+			StartTime: time.Unix(0, 0),
+		},
+	)
 }
 
 func newRouter() *chi.Mux {
