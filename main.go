@@ -39,16 +39,16 @@ func init() {
 		log.Fatalln("Error instantiating templates: ", err)
 	}
 
-	dbPort, err := strconv.ParseUint(os.Getenv("DB_PORT"), 10, 16)
+	dbPort, err := strconv.ParseUint(os.Getenv("POSTGRES_PORT"), 10, 16)
 	if err != nil {
 		log.Fatalln("Failed to convert db port from environment variable to int: ", err)
 	}
 	auth.Db = stdlib.OpenDB(pgx.ConnConfig{
-		Host:     os.Getenv("DB_HOST"),
+		Host:     os.Getenv("POSTGRES_HOST"),
 		Port:     uint16(dbPort),
-		Database: os.Getenv("DATABASE"),
-		User:     os.Getenv("DB_USER"),
-		Password: os.Getenv("DB_PASSWORD"),
+		Database: os.Getenv("POSTGRES_DB"),
+		User:     os.Getenv("POSTGRES_USER"),
+		Password: os.Getenv("POSTGRES_PASSWORD"),
 	})
 
 	auth.Store, err = pgstore.NewPGStoreFromPool(auth.Db, []byte(os.Getenv("SESSION_SECRET")))

@@ -120,7 +120,7 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusCreated)
 	err = Tmpl.ExecuteTemplate(w, "login.html", nil)
 	if err != nil {
 		log.Println("error executing template: ", err)

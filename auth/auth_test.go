@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -29,7 +30,7 @@ var scyllaSession gocqlx.Session
 func init() {
 	err := godotenv.Load("../.env")
 	if err != nil {
-		log.Fatalln("Error loading .env file: ", err)
+		log.Println("Error loading .env file: ", err)
 	}
 
 	Tmpl, err = template.New("templates").ParseGlob("../templates/*.html")
@@ -37,16 +38,16 @@ func init() {
 		log.Fatalln("Error instantiating templates: ", err)
 	}
 
-	dbPort, err := strconv.ParseUint(os.Getenv("DB_PORT"), 10, 16)
+	dbPort, err := strconv.ParseUint(os.Getenv("POSTGRES_PORT"), 10, 16)
 	if err != nil {
 		log.Fatalln("Failed to convert db port from environment variable to int: ", err)
 	}
 	Db = stdlib.OpenDB(pgx.ConnConfig{
-		Host:     os.Getenv("DB_HOST"),
+		Host:     os.Getenv("POSTGRES_HOST"),
 		Port:     uint16(dbPort),
-		Database: os.Getenv("DATABASE"),
-		User:     os.Getenv("DB_USER"),
-		Password: os.Getenv("DB_PASSWORD"),
+		Database: os.Getenv("POSTGRES_DB"),
+		User:     os.Getenv("POSTGRES_USER"),
+		Password: os.Getenv("POSTGRES_PASSWORD"),
 	})
 
 	Store, err = pgstore.NewPGStoreFromPool(Db, []byte(os.Getenv("SESSION_SECRET")))
@@ -80,9 +81,30 @@ func init() {
 		log.Fatalln("Problem creating Invites table: ", err)
 	}
 
-	// creating scylla cluster
-	cluster := gocql.NewCluster("127.0.0.1")
-	cluster.Keyspace = os.Getenv("KEYSPACE")
+	// creating temporary cassandra cluster in order to create keyspace
+	tempCluster := gocql.NewCluster("localhost")
+	keyspace := os.Getenv("KEYSPACE")
+	cqlSession, err := tempCluster.CreateSession()
+	if err != nil {
+		log.Fatalln("Failed to create cluster session: ", err)
+	}
+
+	createKeyspace := cqlSession.Query(
+		fmt.Sprintf(
+			`CREATE KEYSPACE IF NOT EXISTS %s
+				WITH replication = {
+					'class' : 'SimpleStrategy',
+					'replication_factor' : 3
+				}`,
+			os.Getenv("KEYSPACE"),
+		), nil)
+	err = createKeyspace.Exec()
+	if err != nil {
+		log.Fatalln("Failed to create keyspace: ", err)
+	}
+
+	cluster := gocql.NewCluster("localhost")
+	cluster.Keyspace = keyspace
 	scyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
 	if err != nil {
 		log.Fatalln("Failed to wrap new cluster session: ", err)
@@ -138,7 +160,7 @@ func TestSignup(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	status := res.Code
-	if status != http.StatusOK {
+	if status != http.StatusCreated {
 		t.Errorf("handle returned wrong status code: got %v want %v\n", status, http.StatusOK)
 	}
 }
