@@ -2,8 +2,7 @@ name: Test
 
 on: 
     push:
-        branches: [ travisCI ]
-        # branches: [ master ]
+        branches: [ master ]
     pull_request:
         branches: [ master ]
 
@@ -11,7 +10,6 @@ jobs:
     test:
         name: Test Code
         runs-on: ubuntu-18.04
-        # container: ubuntu:18.04
 
         services:
             postgres:
@@ -59,24 +57,3 @@ jobs:
                 SESSION_SECRET: sessionsecret
                 PGPASSWORD: postgres
                 KEYSPACE: chatserver
-            # - name: create chat role
-            #   env:
-            #     PGPASSWORD: postgres
-            #   run: psql -c "CREATE ROLE chat WITH SUPERUSER CREATEDB LOGIN PASSWORD 'postgres';" -U postgres -h localhost -p 5432 -w
-            # - name: create chat database 
-            #   env:
-            #     PGPASSWORD: postgres
-            #   run: psql -c 'CREATE DATABASE chat;' -U postgres -h localhost -p 5432 -w
-            # - name: create chat-app database 
-            #   env:
-            #     PGPASSWORD: postgres
-            #   run: psql -c 'CREATE DATABASE "chat-app";' -U chat -h localhost -p 5432 -w
-
-                # env:
-                #     POSTGRES_USER: postgres
-                #     POSTGRES_PASSWORD: postgres
-                #     POSTGRES_DB: chat-app 
-                #     POSTGRES_PORT: 5432
-                #     POSTGRES_HOST: postgres 
-                #     SESSION_SECRET: sessionsecret
-                    #   KEYSPACE: chatserver
