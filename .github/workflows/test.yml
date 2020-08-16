@@ -58,6 +58,7 @@ jobs:
                 POSTGRES_HOST: localhost 
                 SESSION_SECRET: sessionsecret
                 PGPASSWORD: postgres
+                KEYSPACE: chatserver
             # - name: create chat role
             #   env:
             #     PGPASSWORD: postgres
