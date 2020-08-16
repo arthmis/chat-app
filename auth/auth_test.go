@@ -102,7 +102,7 @@ func init() {
 					'replication_factor' : 3
 				}`,
 			cluster.Keyspace,
-		))
+		), nil)
 	err = createKeyspace.Exec()
 	if err != nil {
 		log.Fatalln("Failed to create keyspace: ", err)
