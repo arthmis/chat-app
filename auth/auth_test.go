@@ -81,7 +81,7 @@ func init() {
 		log.Fatalln("Problem creating Invites table: ", err)
 	}
 
-	// creating cassandra cluster
+	// creating temporary cassandra cluster in order to create keyspace
 	tempCluster := gocql.NewCluster("localhost")
 	keyspace := os.Getenv("KEYSPACE")
 	cqlSession, err := tempCluster.CreateSession()
