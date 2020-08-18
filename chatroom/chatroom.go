@@ -1,7 +1,8 @@
 package chatroom
 
 import (
-	"chat/auth"
+	"chat/database"
+	"chat/validate"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -116,14 +117,14 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	session, err := auth.Store.Get(req, "session-name")
+	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
 		log.Println("error getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	roomName := req.FormValue("chatroom_name")
-	err = auth.Validate.Var(roomName, "lt=30,gt=3,alphanumeric")
+	err = validate.Validate.Var(roomName, "lt=30,gt=3,alphanumeric")
 	if err != nil {
 		log.Println("chatroom name was not valid: ", err)
 		writer.WriteHeader(http.StatusBadRequest)
@@ -195,7 +196,7 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 	inviteCode = strings.ReplaceAll(inviteCode, "-", "")
 	fmt.Println(inviteCode)
 	if forever == math.Inf(1) {
-		_, err := auth.Db.Exec(
+		_, err := database.PgDB.Exec(
 			`INSERT INTO Invites (invite, chatroom, expires) VALUES ($1, $2, $3)`,
 			inviteCode,
 			roomName,
@@ -207,7 +208,7 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	} else {
-		_, err := auth.Db.Exec(
+		_, err := database.PgDB.Exec(
 			`INSERT INTO Invites (invite, chatroom, expires) VALUES ($1, $2, $3)`,
 			inviteCode,
 			roomName,
@@ -243,7 +244,7 @@ func Join(writer http.ResponseWriter, req *http.Request) {
 
 	inviteCode := req.FormValue("invite_code")
 
-	row := auth.Db.QueryRow(
+	row := database.PgDB.QueryRow(
 		`SELECT chatroom, expires FROM Invites WHERE invite=$1`,
 		inviteCode,
 	)
@@ -263,7 +264,7 @@ func Join(writer http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	session, err := auth.Store.Get(req, "session-name")
+	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
 		log.Println("err getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)

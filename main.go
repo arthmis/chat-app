@@ -23,6 +23,7 @@ import (
 
 	"chat/auth"
 	"chat/chatroom"
+	"chat/database"
 	// "chat/validate"
 )
 
@@ -43,7 +44,7 @@ func init() {
 	if err != nil {
 		log.Fatalln("Failed to convert db port from environment variable to int: ", err)
 	}
-	auth.Db = stdlib.OpenDB(pgx.ConnConfig{
+	database.PgDB = stdlib.OpenDB(pgx.ConnConfig{
 		Host:     os.Getenv("POSTGRES_HOST"),
 		Port:     uint16(dbPort),
 		Database: os.Getenv("POSTGRES_DB"),
@@ -51,12 +52,12 @@ func init() {
 		Password: os.Getenv("POSTGRES_PASSWORD"),
 	})
 
-	auth.Store, err = pgstore.NewPGStoreFromPool(auth.Db, []byte(os.Getenv("SESSION_SECRET")))
+	database.PgStore, err = pgstore.NewPGStoreFromPool(database.PgDB, []byte(os.Getenv("SESSION_SECRET")))
 	if err != nil {
 		log.Fatalln("Error creating session store using postgres: ", err)
 	}
 
-	_, err = auth.Db.Exec(
+	_, err = database.PgDB.Exec(
 		`CREATE TABLE IF NOT EXISTS Users (
 			id serial PRIMARY KEY,
 			email TEXT NOT NULL,
@@ -69,7 +70,7 @@ func init() {
 		log.Fatalln("Problem creating Users table: ", err)
 	}
 
-	_, err = auth.Db.Exec(
+	_, err = database.PgDB.Exec(
 		`CREATE TABLE IF NOT EXISTS Invites (
 			id serial PRIMARY KEY,
 			invite TEXT NOT NULL,
@@ -82,7 +83,7 @@ func init() {
 		log.Fatalln("Problem creating Invites table: ", err)
 	}
 
-	go chatroom.RemoveExpiredInvites(auth.Db, time.Minute*10)
+	go chatroom.RemoveExpiredInvites(database.PgDB, time.Minute*10)
 
 	// creating scylla cluster
 	cluster := gocql.NewCluster("127.0.0.1")
@@ -115,7 +116,7 @@ func init() {
 }
 
 func main() {
-	defer auth.Db.Close()
+	defer database.PgDB.Close()
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)

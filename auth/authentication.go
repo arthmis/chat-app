@@ -1,24 +1,21 @@
 package auth
 
 import (
+	"chat/database"
+	"chat/validate"
 	"context"
 	"database/sql"
 	"html/template"
 	"log"
 	"net/http"
 
-	"github.com/antonlindstrom/pgstore"
-	"github.com/go-playground/validator"
 	"github.com/gorilla/schema"
 	"github.com/gorilla/sessions"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var Decoder = schema.NewDecoder()
-var Validate = validator.New()
 var Tmpl *template.Template
-var Store *pgstore.PGStore
-var Db *sql.DB
 
 type UserSignup struct {
 	Email           string `form:"email" validate:"required,email,max=50"`
@@ -48,7 +45,7 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = Validate.Struct(form)
+	err = validate.Validate.Struct(form)
 	if err != nil {
 		log.Println("err validating form in signup: ", err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -105,7 +102,7 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if err == nil {
-		_, err = Db.Exec(
+		_, err = database.PgDB.Exec(
 			`INSERT INTO Users (email, username, password) VALUES ($1, $2, $3)`,
 			form.Email,
 			form.Username,
@@ -151,7 +148,7 @@ func Login(w http.ResponseWriter, req *http.Request) {
 		"Email or Password is incorrect",
 	}
 
-	row := Db.QueryRow(
+	row := database.PgDB.QueryRow(
 		`SELECT password FROM Users WHERE email=$1`,
 		form.Email,
 	)
@@ -183,7 +180,7 @@ func Login(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	session, err := Store.New(req, "session-name")
+	session, err := database.PgStore.New(req, "session-name")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Println("error creating new unsaved session: ", err)
@@ -196,7 +193,7 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// todo: combine this with search for password to get username and password
-	row = Db.QueryRow(
+	row = database.PgDB.QueryRow(
 		`SELECT username FROM Users WHERE email=$1`,
 		form.Email,
 	)
@@ -221,7 +218,7 @@ func Login(w http.ResponseWriter, req *http.Request) {
 }
 
 func checkUserExists(ctx context.Context, email string, username string) (emailExists, usernameExists bool) {
-	row := Db.QueryRow(
+	row := database.PgDB.QueryRow(
 		`SELECT email FROM Users WHERE email=$1`,
 		email,
 	)
@@ -231,7 +228,7 @@ func checkUserExists(ctx context.Context, email string, username string) (emailE
 	if err != nil {
 		emailExists = false
 	}
-	row = Db.QueryRow(
+	row = database.PgDB.QueryRow(
 		`SELECT username FROM Users WHERE username=$1`,
 		username,
 	)
@@ -246,7 +243,7 @@ func checkUserExists(ctx context.Context, email string, username string) (emailE
 }
 
 func Logout(w http.ResponseWriter, req *http.Request) {
-	session, err := Store.Get(req, "session-name")
+	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
 		log.Println("err getting session name: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -265,7 +262,7 @@ func Logout(w http.ResponseWriter, req *http.Request) {
 
 func UserSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		session, err := Store.Get(req, "session-name")
+		session, err := database.PgStore.Get(req, "session-name")
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			log.Println("error getting session: ", err)

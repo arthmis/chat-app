@@ -1,12 +1,7 @@
 package validate
 
 import (
-	// "log"
-	// "net/http"
-
-	// "chat/auth"
-
 	"github.com/go-playground/validator"
 )
 
-var Validate *validator.Validate
+var Validate *validator.Validate = validator.New()

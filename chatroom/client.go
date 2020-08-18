@@ -1,7 +1,7 @@
 package chatroom
 
 import (
-	"chat/auth"
+	"chat/database"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -21,7 +21,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 
 	defer conn.Close()
 
-	session, err := auth.Store.Get(req, "session-name")
+	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
 		log.Println("err getting session name: ", err)
 	}

@@ -44,16 +44,16 @@ jobs:
                 go-version: 1.14.7
             - name: testing code
               run: |
-                psql -c "CREATE ROLE chat WITH SUPERUSER CREATEDB LOGIN PASSWORD 'postgres';" -U postgres -h localhost -p 5432 -w
-                psql -c 'CREATE DATABASE chat;' -U postgres -h localhost -p 5432 -w
-                psql -c 'CREATE DATABASE "chat-app";' -U chat -h localhost -p 5432 -w
+                psql -c "CREATE ROLE testdb WITH SUPERUSER CREATEDB LOGIN PASSWORD 'postgres';" -U postgres -h localhost -p 5432 -w
+                psql -c 'CREATE DATABASE testdb;' -U postgres -h localhost -p 5432 -w
+                psql -c 'ALTER DATABASE testdb OWNER to testdb;' -U postgres -h localhost -p 5432 -w
                 go test ./...
               env:
-                POSTGRES_USER: chat
-                POSTGRES_PASSWORD: postgres
-                POSTGRES_DB: chat-app 
-                POSTGRES_PORT: 5432
-                POSTGRES_HOST: localhost 
+                PGTEST_USER: testdb
+                PGTEST_PASSWORD: postgres
+                PGTEST_DB: testdb 
+                PGTEST_PORT: 5432
+                PGTEST_HOST: localhost 
                 SESSION_SECRET: sessionsecret
                 PGPASSWORD: postgres
                 KEYSPACE: chatserver
