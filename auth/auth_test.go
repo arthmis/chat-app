@@ -150,10 +150,6 @@ func newRouter() *chi.Mux {
 	return router
 }
 
-// func addUsers() {
-
-// }
-
 func TestSignup(t *testing.T) {
 	func(t *testing.T) {
 		t.Cleanup(func() {
@@ -186,7 +182,5 @@ func TestSignup(t *testing.T) {
 	status := res.Code
 	if status != http.StatusCreated {
 		t.Errorf("signup endpoint returned wrong status code: got %v want %v\n", status, http.StatusOK)
-	}
-}
 	}
 }
