@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"chat/chatroom"
+	"chat/database"
 	"fmt"
 	"html/template"
 	"log"
@@ -38,24 +40,24 @@ func init() {
 		log.Fatalln("Error instantiating templates: ", err)
 	}
 
-	dbPort, err := strconv.ParseUint(os.Getenv("POSTGRES_PORT"), 10, 16)
+	dbPort, err := strconv.ParseUint(os.Getenv("PGTEST_PORT"), 10, 16)
 	if err != nil {
 		log.Fatalln("Failed to convert db port from environment variable to int: ", err)
 	}
-	Db = stdlib.OpenDB(pgx.ConnConfig{
-		Host:     os.Getenv("POSTGRES_HOST"),
+	database.PgDB = stdlib.OpenDB(pgx.ConnConfig{
+		Host:     os.Getenv("PGTEST_HOST"),
 		Port:     uint16(dbPort),
-		Database: os.Getenv("POSTGRES_DB"),
-		User:     os.Getenv("POSTGRES_USER"),
-		Password: os.Getenv("POSTGRES_PASSWORD"),
+		Database: os.Getenv("PGTEST_DB"),
+		User:     os.Getenv("PGTEST_USER"),
+		Password: os.Getenv("PGTEST_PASSWORD"),
 	})
 
-	Store, err = pgstore.NewPGStoreFromPool(Db, []byte(os.Getenv("SESSION_SECRET")))
+	database.PgStore, err = pgstore.NewPGStoreFromPool(database.PgDB, []byte(os.Getenv("SESSION_SECRET")))
 	if err != nil {
 		log.Fatalln("Error creating session store using postgres: ", err)
 	}
 
-	_, err = Db.Exec(
+	_, err = database.PgDB.Exec(
 		`CREATE TABLE IF NOT EXISTS Users (
 			id serial PRIMARY KEY,
 			email TEXT NOT NULL,
@@ -68,7 +70,7 @@ func init() {
 		log.Fatalln("Problem creating Users table: ", err)
 	}
 
-	_, err = Db.Exec(
+	_, err = database.PgDB.Exec(
 		`CREATE TABLE IF NOT EXISTS Invites (
 			id serial PRIMARY KEY,
 			invite TEXT NOT NULL,
@@ -138,10 +140,32 @@ func newRouter() *chi.Mux {
 	router.Post("/signup", Signup)
 	router.Post("/login", Login)
 	router.With(UserSession).Post("/logout", Logout)
+	router.With(UserSession).Post("/logout", Logout)
 	// router.With(UserSession).Get("/chat", chat)
+	router.Handle("/", http.FileServer(http.Dir("./frontend")))
+	router.With(UserSession).Get("/ws", chatroom.OpenWsConnection)
+	router.With(UserSession).Post("/create-room", chatroom.Create)
+	router.With(UserSession).Post("/join-room", chatroom.Join)
+	router.With(UserSession).Post("/create-invite", chatroom.CreateInvite)
 	return router
 }
+
+// func addUsers() {
+
+// }
+
 func TestSignup(t *testing.T) {
+	func(t *testing.T) {
+		t.Cleanup(func() {
+			_, err := database.PgDB.Exec(
+				`DELETE FROM users;`,
+			)
+			if err != nil {
+				log.Println("error deleting all users: ", err)
+			}
+		})
+	}(t)
+
 	form := url.Values{}
 	form.Set("email", "test@gmail.com")
 	form.Set("username", "art")
@@ -161,6 +185,8 @@ func TestSignup(t *testing.T) {
 
 	status := res.Code
 	if status != http.StatusCreated {
-		t.Errorf("handle returned wrong status code: got %v want %v\n", status, http.StatusOK)
+		t.Errorf("signup endpoint returned wrong status code: got %v want %v\n", status, http.StatusOK)
+	}
+}
 	}
 }
