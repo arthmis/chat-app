@@ -3,6 +3,7 @@ package auth
 import (
 	"chat/chatroom"
 	"chat/database"
+	"chat/validate"
 	"fmt"
 	"html/template"
 	"log"
@@ -24,6 +25,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/scylladb/gocqlx/v2"
 	"github.com/sony/sonyflake"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var snowflake *sonyflake.Sonyflake
@@ -150,6 +152,36 @@ func newRouter() *chi.Mux {
 	return router
 }
 
+func addUser() {
+	type tempUser struct {
+		email    string `form:"email" validate:"required,email,max=50"`
+		username string `form:"username" validate:"required,min=3,max=30"`
+		password string `form:"password" validate:"required,eqfield=ConfirmPassword,min=8,max=50"`
+	}
+
+	user := tempUser{email: "test@gmail.com", username: "art", password: "secretpassy"}
+	err := validate.Validate.Struct(user)
+	if err != nil {
+		log.Println("err validating user data: ", err)
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(user.password), bcrypt.MinCost)
+	if err != nil {
+		log.Println("err generating from password: ", err)
+		return
+	}
+	_, err = database.PgDB.Exec(
+		`INSERT INTO Users (email, username, password) VALUES ($1, $2, $3)`,
+		user.email,
+		user.username,
+		string(hash),
+	)
+	if err != nil {
+		log.Println("error inserting new user: ", err)
+	}
+}
+
 func TestSignup(t *testing.T) {
 	func(t *testing.T) {
 		t.Cleanup(func() {
@@ -182,5 +214,39 @@ func TestSignup(t *testing.T) {
 	status := res.Code
 	if status != http.StatusCreated {
 		t.Errorf("signup endpoint returned wrong status code: got %v want %v\n", status, http.StatusOK)
+	}
+}
+
+func TestLogin(t *testing.T) {
+	func(t *testing.T) {
+		addUser()
+		t.Cleanup(func() {
+			_, err := database.PgDB.Exec(
+				`DELETE FROM users;`,
+			)
+			if err != nil {
+				log.Println("error deleting all users: ", err)
+			}
+		})
+	}(t)
+
+	form := url.Values{}
+	form.Set("email", "test@gmail.com")
+	form.Set("password", "secretpassy")
+
+	encodedForm := strings.NewReader(form.Encode())
+	req, err := http.NewRequest(http.MethodPost, "/login", encodedForm)
+	if err != nil {
+		t.Fatal("error creating new request: ", err)
+	}
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	res := httptest.NewRecorder()
+	router := newRouter()
+	router.ServeHTTP(res, req)
+
+	status := res.Code
+	if status != http.StatusSeeOther {
+		t.Errorf("login endpoint returned wrong status code: got %v want %v\n", status, http.StatusSeeOther)
 	}
 }
