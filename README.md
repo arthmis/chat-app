@@ -4,6 +4,10 @@ This will eventually be a basic chatroom application that takes some inspiration
 from Discord. It isn't meant to be a discord clone. It's only meant to be a learning 
 experience for backend software, using NoSql(CassandraDB), and PostgreSQL.
 
+## Warning
+This Readme isn't complete because testing for Cassandra isn't complete or polished. 
+So there will be some issues. 
+
 ## Building
 
 The OS used is ubuntu 18.04.
@@ -84,7 +88,4 @@ This database will be used purely for running tests.
 
 Run all tests with `go test ./...`
 
-### Warning
-This Readme isn't complete because testing for Cassandra isn't complete or polished. 
-So there will be some issues. 
 
