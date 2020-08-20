@@ -35,7 +35,7 @@ nav {
     color: var(--main-font-color);
     background-color: inherit;
     font-size: 1.1em;
-    font-family: "Open Sans"
+    font-family: "Open Sans" sans-serif;
 }
 #logout > input:hover {
     color: #b1111e;
