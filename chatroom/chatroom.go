@@ -52,7 +52,7 @@ type Chatroom struct {
 var chatrooms = make(map[string]*Chatroom)
 var ChatroomChannels = make(map[string]chan UserMessage)
 var Snowflake *sonyflake.Sonyflake
-var ScyllaSession gocqlx.Session
+var CassandraSession gocqlx.Session
 
 func (room *Chatroom) Run() {
 	for {
@@ -110,7 +110,7 @@ func NewChatroom() *Chatroom {
 
 // TODO think about tracking users and the rooms they are a part of
 func Create(writer http.ResponseWriter, req *http.Request) {
-	err := req.ParseForm()
+	err := req.ParseMultipartForm(1000)
 	if err != nil {
 		log.Println("error parsing form: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
@@ -124,18 +124,20 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 		return
 	}
 	roomName := req.FormValue("chatroom_name")
-	err = validate.Validate.Var(roomName, "lt=30,gt=3,alphanumeric")
+	err = validate.Validate.Var(roomName, "lt=30,gt=3,ascii")
 	if err != nil {
 		log.Println("chatroom name was not valid: ", err)
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
+	username := session.Values["username"].(string)
+
 	room := NewChatroom()
-	room.Id = req.FormValue("chatroom_name")
+	room.Id = roomName
 	room.Snowflake = Snowflake
-	room.ScyllaSession = &ScyllaSession
-	Clients[session.Values["username"].(string)].Chatrooms = append(Clients[session.Values["username"].(string)].Chatrooms, room.Id)
+	room.ScyllaSession = &CassandraSession
+	Clients[username].Chatrooms = append(Clients[username].Chatrooms, room.Id)
 	room.Users = append(room.Users, Clients[session.Values["username"].(string)])
 	ChatroomChannels[room.Id] = room.Channel
 	chatrooms[room.Id] = room

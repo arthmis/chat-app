@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"chat/chatroom"
 	"chat/database"
 	"chat/validate"
 	"context"
@@ -116,6 +117,7 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	chatroom.Clients[form.Username] = &chatroom.User{}
 
 	w.WriteHeader(http.StatusCreated)
 	err = Tmpl.ExecuteTemplate(w, "login.html", nil)

@@ -88,12 +88,12 @@ func init() {
 	// creating scylla cluster
 	cluster := gocql.NewCluster("127.0.0.1")
 	cluster.Keyspace = os.Getenv("KEYSPACE")
-	chatroom.ScyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
+	chatroom.CassandraSession, err = gocqlx.WrapSession(cluster.CreateSession())
 	if err != nil {
 		log.Fatalln("Failed to wrap new cluster session: ", err)
 	}
 
-	err = chatroom.ScyllaSession.ExecStmt(
+	err = chatroom.CassandraSession.ExecStmt(
 		`CREATE TABLE IF NOT EXISTS messages(
 			chatroom_name TEXT,
 			user_id TEXT,
