@@ -253,7 +253,8 @@ func Logout(w http.ResponseWriter, req *http.Request) {
 	}
 
 	session.Options.MaxAge = -1
-	if err = session.Save(req, w); err != nil {
+	err = session.Save(req, w)
+	if err != nil {
 		log.Println("Error deleting session: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return

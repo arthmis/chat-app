@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/antonlindstrom/pgstore"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/gocql/gocql"
@@ -142,9 +143,8 @@ func newRouter() *chi.Mux {
 	router.Post("/signup", Signup)
 	router.Post("/login", Login)
 	router.With(UserSession).Post("/logout", Logout)
-	router.With(UserSession).Post("/logout", Logout)
 	// router.With(UserSession).Get("/chat", chat)
-	router.Handle("/", http.FileServer(http.Dir("./frontend")))
+	// router.Handle("/", http.FileServer(http.Dir("./frontend")))
 	router.With(UserSession).Get("/ws", chatroom.OpenWsConnection)
 	router.With(UserSession).Post("/create-room", chatroom.Create)
 	router.With(UserSession).Post("/join-room", chatroom.Join)
@@ -249,4 +249,83 @@ func TestLogin(t *testing.T) {
 	if status != http.StatusSeeOther {
 		t.Errorf("login endpoint returned wrong status code: got %v want %v\n", status, http.StatusSeeOther)
 	}
+}
+
+func TestLogout(t *testing.T) {
+	func(t *testing.T) {
+		t.Cleanup(func() {
+			_, err := database.PgDB.Exec(
+				`DELETE FROM users;`,
+			)
+			if err != nil {
+				log.Println("error deleting all users: ", err)
+			}
+		})
+	}(t)
+	// server := httptest.NewServer(newRouter())
+	server := httptest.NewUnstartedServer(newRouter())
+	server.Config = &http.Server{
+		Addr: "http://localhost:8000",
+	}
+	server.Start()
+	defer server.Close()
+
+	client := server.Client()
+
+	form := url.Values{}
+	form.Set("email", "test@gmail.com")
+	form.Set("username", "art")
+	form.Set("password", "secretpassy")
+	form.Set("confirmPassword", "secretpassy")
+	res, err := client.PostForm("/signup", form)
+	fmt.Println(err)
+	fmt.Println(res)
+
+	form = url.Values{}
+	form.Set("email", "test@gmail.com")
+	form.Set("password", "secretpassy")
+	res, _ = client.PostForm("/login", form)
+	log.Println(res)
+
+	// req, _ := http.NewRequest(http.MethodPost, "/logout", strings.NewReader(""))
+	// res, _ := client.Do(req)
+	// res, _ := client.Post("/logout", "text/plain", strings.NewReader(""))
+	form = url.Values{}
+	res, _ = client.PostForm("/logout", form)
+	// status := res.
+	spew.Dump(res)
+	// fmt.Println(status)
+	// if status != http.StatusSeeOther {
+	// 	t.Errorf("logout endpoint returned wrong status code: got %v want %v\n", status, http.StatusSeeOther)
+	// }
+
+	// encodedForm := strings.NewReader(form.Encode())
+	// req, err := http.NewRequest(http.MethodPost, "/login", encodedForm)
+	// if err != nil {
+	// 	t.Fatal("error creating new request: ", err)
+	// }
+	// req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	// addUser()
+	// session, err := database.PgStore.Get(req, "session-name")
+	// if err != nil {
+	// 	log.Println("error creating new unsaved session: ", err)
+	// 	return
+	// }
+	// session.Options = &sessions.Options{
+	// 	Path:     "/",
+	// 	MaxAge:   60 * 60 * 24 * 7,
+	// 	HttpOnly: true,
+	// }
+	// username := "art"
+	// session.Values["username"] = username
+
+	// res := httptest.NewRecorder()
+	// router := newRouter()
+	// router.ServeHTTP(res, req)
+
+	// status := res.Code
+	// if status != http.StatusSeeOther {
+	// 	t.Errorf("login endpoint returned wrong status code: got %v want %v\n", status, http.StatusSeeOther)
+	// }
 }

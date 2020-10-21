@@ -8,93 +8,13 @@
     <link rel="stylesheet" type="text/css" href="/css/chat.css" />
     <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans&display=swap" rel="stylesheet"> 
-    <script src="/js/chat.js" defer></script>
+    <script src="https://unpkg.com/react@16/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@16/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="/dist/chat.js" defer></script>
 </head>
 
 <body>
-    <header>
-        <nav>
-            <a id="landing-page" href="/">Chat App</a>
-            <form id="logout" action="/logout" method="POST">
-                <input type="submit" value="Logout" form="logout">
-            </form>
-        </nav>
-    </header>
-    <main>
-        <div id="chatrooms-wrapper">
-            <!-- <form id="connect-chatroom" method="POST">
-                <input id="chatroom-name" type="text" name="room-id" form="connect-chatroom" />
-                <input id="add-chatroom" type="submit" value="Add Chatroom" form="connect-chatroom" />
-            </form> -->
-            <div id="chatrooms">
-
-            </div>
-            <button id="join-chatroom">Join Chatroom</button>
-            <button id="new-chatroom">New Chatroom</button>
-        </div>
-        <div id="chat-view-wrapper">
-            <div id="chat-view">
-
-            </div>
-            <div id="user-message-wrapper">
-                <input id="user-message" type="text" name="user-message" placeholder="type your message" />
-                <button id="send" name="send">Send</button>
-            </div>
-        </div>
-        <div id="new-chatroom-form-wrapper" class="visibility">
-            <form id="new-chatroom-form" action="/create-room" method="POST">
-                <p>Create your new chatroom</p>
-                <div class="input-group">
-                    <label for="new-chatroom-name">Chatroom Name</label>
-                    <input class="user-input" type="text" id="new-chatroom-name" name="chatroom_name"
-                        form="new-chatroom-form" placeholder="Unique Name" required>
-                </div>
-                <input type="submit" form="new-chatroom-form" id="new-chatroom-submit" value="Create">
-            </form>
-        </div>
-        <div id="join-chatroom-form-wrapper" class="visibility">
-            <form id="join-chatroom-form" action="/join-room" method="POST">
-                <p>Join a new community</p>
-                <div class="input-group">
-                    <label for="join-chatroom-name">Invite Code</label>
-                    <input class="user-input" type="text" id="join-invite-code" name="invite_code"
-                        form="join-chatroom-form" placeholder="Unique Name" required>
-                </div>
-                <input type="submit" form="join-chatroom-form" id="join-chatroom-submit" value="Join">
-            </form>
-        </div>
-        <div id="create-invite-form-wrapper" class="visibility">
-            <form id="create-invite-form" action="/create-invite" method="POST">
-                <p>Create Invitation for your community</p>
-                <div class="invitation-group">
-                    <input class="invitation-choices" type="radio" id="twenty-four-hours" name="invite_timelimit"
-                        form="create-invite-form" value="1 day" required>
-                    <label for="twenty-four-hours">1 day</label>
-                </div>
-                <div class="invitation-group">
-                    <input class="invitation-choices" type="radio" id="one-week" name="invite_timelimit"
-                        form="create-invite-form" value="1 week" required>
-                    <label for="one-week">1 week</label>
-                </div>
-                <div class="invitation-group">
-                    <input class="invitation-choices" type="radio" id="forever" name="invite_timelimit"
-                        form="create-invite-form" value="Forever" required>
-                    <label for="forever">Forever</label>
-                </div>
-                <input type="submit" form="create-invite-form" id="create-invite-submit" value="Create Invitation">
-            </form>
-        </div>
-        <div id="invite-code-wrapper" class="visibility">
-            <div id="invite-code-view">
-                <div>
-                    <button id="back-create-invite"><-Back</button>
-                </div>
-                <label for="invite-code">Here's your invite code</label>
-                <input id="invite-code" type="text" readonly />
-                <span><button>Copy</button></span>
-            </div>
-        </div>
-    </main>
+    <div id="root"></div>
 </body>
 
 </html>
