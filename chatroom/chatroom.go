@@ -14,8 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/scylladb/gocqlx/table"
 	"github.com/scylladb/gocqlx/v2"
+	"github.com/scylladb/gocqlx/v2/table"
 	"github.com/sony/sonyflake"
 )
 
@@ -25,8 +25,15 @@ var messageMetaData = table.Metadata{
 	PartKey: []string{"chatroom_name", "message_id"},
 	SortKey: []string{"message_id"},
 }
+var userMetaData = table.Metadata{
+	Name:    "users",
+	Columns: []string{"user", "current_chatroom", "chatroom"},
+	PartKey: []string{"user", "chatroom"},
+	SortKey: []string{"chatroom"},
+}
 
 var chatroomTable = table.New(messageMetaData)
+var userTable = table.New(userMetaData)
 
 type Message struct {
 	ChatroomName string
@@ -52,7 +59,7 @@ type Chatroom struct {
 var chatrooms = make(map[string]*Chatroom)
 var ChatroomChannels = make(map[string]chan UserMessage)
 var Snowflake *sonyflake.Sonyflake
-var CassandraSession gocqlx.Session
+var ScyllaSession gocqlx.Session
 
 func (room *Chatroom) Run() {
 	for {
@@ -136,7 +143,25 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 	room := NewChatroom()
 	room.Id = roomName
 	room.Snowflake = Snowflake
-	room.ScyllaSession = &CassandraSession
+	room.ScyllaSession = &ScyllaSession
+
+	newRoomForUser := struct {
+		User            string
+		CurrentChatroom string
+		Chatroom        string
+	}{
+		User:            username,
+		CurrentChatroom: roomName,
+		Chatroom:        roomName,
+	}
+	query := room.ScyllaSession.Query(userTable.Insert()).BindStruct(newRoomForUser)
+	err = query.ExecRelease()
+	if err != nil {
+		log.Println("Error inserting new chatroom for user in user table: ", err)
+		return
+		// return err
+	}
+
 	Clients[username].Chatrooms = append(Clients[username].Chatrooms, room.Id)
 	room.Users = append(room.Users, Clients[session.Values["username"].(string)])
 	ChatroomChannels[room.Id] = room.Channel

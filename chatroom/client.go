@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/websocket"
 )
 
@@ -56,7 +57,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 		userMessage.User = clientName
 
 		fmt.Println("message type: ", messageType)
-		// spew.Dump(userMessage)
+		spew.Dump(userMessage)
 		fmt.Println()
 		ChatroomChannels[userMessage.ChatroomName] <- userMessage
 		if err != nil {

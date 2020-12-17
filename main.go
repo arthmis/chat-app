@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -54,7 +55,7 @@ func init() {
 
 	database.PgStore, err = pgstore.NewPGStoreFromPool(database.PgDB, []byte(os.Getenv("SESSION_SECRET")))
 	if err != nil {
-		log.Fatalln("Error creating session store using postgres: ", err)
+		log.Fatalln("Error creating session store using postgres:", err)
 	}
 
 	_, err = database.PgDB.Exec(
@@ -85,15 +86,36 @@ func init() {
 
 	go chatroom.RemoveExpiredInvites(database.PgDB, time.Minute*10)
 
+	// creating temporary cassandra cluster in order to create keyspace
+	tempCluster := gocql.NewCluster("localhost")
+	cqlSession, err := tempCluster.CreateSession()
+	if err != nil {
+		log.Fatalln("Failed to create cluster session: ", err)
+	}
+
+	createKeyspace := cqlSession.Query(
+		fmt.Sprintf(
+			`CREATE KEYSPACE IF NOT EXISTS %s
+				WITH replication = {
+					'class' : 'SimpleStrategy',
+					'replication_factor' : 1
+				}`,
+			os.Getenv("KEYSPACE"),
+		), nil)
+	err = createKeyspace.Exec()
+	if err != nil {
+		log.Fatalln("Failed to create keyspace: ", err)
+	}
+
 	// creating scylla cluster
 	cluster := gocql.NewCluster("127.0.0.1")
 	cluster.Keyspace = os.Getenv("KEYSPACE")
-	chatroom.CassandraSession, err = gocqlx.WrapSession(cluster.CreateSession())
+	chatroom.ScyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
 	if err != nil {
 		log.Fatalln("Failed to wrap new cluster session: ", err)
 	}
 
-	err = chatroom.CassandraSession.ExecStmt(
+	err = chatroom.ScyllaSession.ExecStmt(
 		`CREATE TABLE IF NOT EXISTS messages(
 			chatroom_name TEXT,
 			user_id TEXT,
@@ -101,6 +123,17 @@ func init() {
 			message_id bigint,
 			PRIMARY KEY (chatroom_name, message_id)
 		) WITH CLUSTERING ORDER BY (message_id DESC)`,
+	)
+	if err != nil {
+		log.Fatalln("Create messages store error:", err)
+	}
+	err = chatroom.ScyllaSession.ExecStmt(
+		`CREATE TABLE IF NOT EXISTS users(
+			user TEXT,
+			current_chatroom TEXT STATIC,
+			chatroom TEXT,
+			PRIMARY KEY (user, chatroom)
+		) WITH CLUSTERING ORDER BY (chatroom ASC)`,
 	)
 	if err != nil {
 		log.Fatalln("Create messages store error:", err)
@@ -135,6 +168,7 @@ func main() {
 	router.With(auth.UserSession).Post("/join-room", chatroom.Join)
 	// add validation middleware
 	router.With(auth.UserSession).Post("/create-invite", chatroom.CreateInvite)
+	router.With(auth.UserSession).Post("/user/chatrooms", chatroom.GetUserChatrooms)
 
 	FileServer(router, "/", http.Dir("./frontend"))
 	err := http.ListenAndServe(addr, router)
