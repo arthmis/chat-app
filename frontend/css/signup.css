@@ -1,0 +1,268 @@
+html, body {
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    font-family: "Open sans", sans-serif;
+    font-size: 16px;
+}
+
+nav {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    height: 4em;
+    width: 100%;
+    background: #6e6e6e;
+}
+a {
+    color: white;
+}
+
+nav * {
+    height: 100%;
+}
+
+main {
+    display: flex;
+    min-height: calc(100vh - 4em);
+    width: 100%;
+    background: #6e6e6e;
+    justify-content: center;
+    align-items: center;
+}
+
+h1 {
+    font-size: 3em;
+}
+
+p {
+    font-size: 1.6em;
+}
+
+#chat-app {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-left: 2em;
+    background-color: inherit;
+    font-family: inherit;
+    font-size: 1em;
+    text-decoration: none;
+    /* color: #292929; */
+}
+#chat-app:visited {
+    /* color: #292929; */
+}
+#chat-app:hover {
+    /* color: #3463bb; */
+}
+
+#user-auth-actions {
+    display: flex;
+    align-items: center;
+}
+
+#login {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 2px solid #dddddd;
+    background-color: inherit;
+    font-family: inherit;
+    font-size: 1em;
+    text-decoration: none;
+    margin-right: 2em;
+    width: 6em;
+    height: 2.3em;
+    border-radius: 3px;
+}
+#login:visited {
+    /* color: #363636; */
+}
+#login:hover {
+    cursor: pointer;
+    /* color: #363636; */
+    /* border: 2px solid #f1db5d; */
+    border: 2px solid #3392d1;
+    background-color: #3392d1;
+}
+
+#sign-up-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    max-width: 60ch;
+    max-height: 60ch;
+    height: 100%;
+    box-shadow: 5px 5px 5px #3f3f3f;
+    background: #666666;
+    border: 1px solid #666666;
+    border-radius: 4px;
+}
+#sign-up-wrapper > h2 {
+    color: #f6f6f6;
+    font-size: 1.5em;
+    margin: 0;
+    padding-top: 1.5em;
+}
+
+#sign-up {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 90%;
+    border-radius: 6px;
+    padding-bottom: 3em;
+    padding-top: 1em;
+}
+
+.input-group {
+    padding-bottom: 1em;
+    width: 100%;
+}
+
+#form-inputs {
+    padding: 1em;
+    width: 85%;
+    color: #e0e0e0;
+}
+
+.sign-up-input {
+    font-family: inherit;
+    /* font-size: 1em; */
+    font-size: 1.1em;
+    margin-top: 0.3em;
+    /* border-radius: 4px; */
+    /* border: 3px solid white; */
+    border: none;
+    padding: 5px;
+    max-width: 100%;
+    width: calc(100% - 10px);
+    color: #e0e0e0;
+    background-color: #4b4b4b;
+}
+
+
+
+.sign-up-input:focus:invalid {
+    box-shadow: 0px 0px 9px 2px #c50700;
+}
+
+.sign-up-input:focus:valid {
+    box-shadow: 0px 0px 4px 2px #2ec500;
+}
+
+.sign-up-input:focus {
+    box-shadow: 0px 0px 9px 2px #3f99ff;
+}
+
+.sign-up-label {
+    font-size: 0.9em;
+}
+
+.unavailable {
+    font-size: 0.9em;
+    color: #c50700;
+}
+
+.label-and-unavailable {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+#submit-button {
+    font-family: inherit;
+    font-size: 1em;
+    width: 100%;
+    height: 3em;
+    color: white;
+    /* color: black; */
+    background-color: #407dc3;
+    font-size: 1.35em;
+    /* border: 1px solid #777777; */
+    border: none;
+    border-radius: 4px;
+}
+
+#submit-button:active {
+    position: relative;
+    top: 1px;
+    right: 1px;
+}
+
+#submit-button:hover {
+    background-color: #639cdd;
+}
+
+@media all and (max-width: 1200px) {
+
+    main {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        width: 100%;
+    }
+
+    #signin-wrapper {
+        width: 50%;
+    }
+}
+
+
+@media all and (max-width: 700px) {
+
+
+    main {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+    }
+    #main-information {
+        width: 100%;
+    }
+
+    #sign-up-wrapper {
+        width: 100%;
+    }
+}
+
+
+@media all and (min-width: 701px) {
+
+
+    main {
+        display: flex;
+        flex-direction: row;
+        min-height: 100vh;
+    }
+    #main-information {
+        width: 60%;
+    }
+
+    #sign-up-wrapper {
+        width: 50%;
+        min-height: 50vh;
+    }
+    #sign-up {
+        height: 100%;
+    }
+}
+
+@media all and (min-width: 1200px) {
+
+
+    main {
+        display: flex;
+        min-height: 100vh;
+        width: 100%;
+    }
+    #main-information {
+        width: 70%;
+    }
+
+    #sign-up-wrapper {
+        width: 30%;
+    }
+}

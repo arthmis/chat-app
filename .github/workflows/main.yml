@@ -1,0 +1,59 @@
+name: Test
+
+on: 
+    push:
+        branches: [ main ]
+    pull_request:
+        branches: [ main ]
+
+jobs:
+    test:
+        name: Test Code
+        runs-on: ubuntu-18.04
+
+        services:
+            postgres:
+                image: postgres:10.12
+                ports: 
+                    - 5432:5432
+                env:
+                    POSTGRES_PASSWORD: postgres
+                options: >- 
+                    --health-cmd pg_isready 
+                    --health-interval 10s 
+                    --health-timeout 5s 
+                    --health-retries 5
+
+            cassandra:
+                image: cassandra
+                ports:
+                    - 7199:7199
+                    - 9042:9042
+                options: >-
+                    --health-cmd "nodetool status"
+                    --health-interval 10s 
+                    --health-timeout 5s 
+                    --health-retries 5
+
+        steps:
+            - name: Check out respository Code
+              uses: actions/checkout@v2
+            - name: Set up Go
+              uses: actions/setup-go@v2
+              with:
+                go-version: 1.14.7
+            - name: testing code
+              run: |
+                psql -c "CREATE ROLE testdb WITH SUPERUSER CREATEDB LOGIN PASSWORD 'postgres';" -U postgres -h localhost -p 5432 -w
+                psql -c 'CREATE DATABASE testdb;' -U postgres -h localhost -p 5432 -w
+                psql -c 'ALTER DATABASE testdb OWNER to testdb;' -U postgres -h localhost -p 5432 -w
+                go test ./...
+              env:
+                PGTEST_USER: testdb
+                PGTEST_PASSWORD: postgres
+                PGTEST_DB: testdb 
+                PGTEST_PORT: 5432
+                PGTEST_HOST: localhost 
+                SESSION_SECRET: sessionsecret
+                PGPASSWORD: postgres
+                KEYSPACE: chatserver

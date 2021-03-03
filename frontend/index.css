@@ -1,0 +1,92 @@
+:root {
+    --main-bg-color: #4f5762;
+    --main-font-color: #dfdfdf;
+    --header-bg-color: #66768b;
+}
+
+html, body {
+    width: 100%;
+    font-size: 16px;
+    padding: 0;
+    margin: 0;
+    font-family: 'Roboto', sans-serif;
+    color: var(--main-font-color);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Open Sans', sans-serif;
+}
+
+header {
+    height: 4em;
+    width: 100%;
+    background-color: var(--header-bg-color);
+}
+
+nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 100%;
+    font-family: 'Open Sans', sans-serif;
+}
+
+#landing-page {
+    color: var(--main-font-color);
+    font-size: 1.1em;
+    text-decoration: none;
+    margin-left: 1em;
+}
+#landing-page:hover {
+    color: #91cff3;
+}
+
+#login, #signup {
+    width: 6em;
+    height: 3em;
+    color: var(--main-font-color);
+    font-size: 1.1em;
+    text-decoration: none;
+    margin-right: 1em;
+    font-family: "Open Sans";
+}
+#login:hover, #signup:hover {
+    color: #ecb989;
+    cursor: pointer;
+}
+
+main {
+    display: flex;
+    flex-direction: column;
+    /* align-items: center; */
+    background-color: var(--main-bg-color);
+    min-height: calc(100vh - 4em);
+    width: 100%;
+}
+
+#intro {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 4em);
+    width: 100%;
+}
+
+#intro > h1 {
+    font-size: 2em;
+    align-self: center;
+    margin-top: 1em;
+}
+
+#main-example {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 2em;
+    width: 100%;
+}
+#main-example > img {
+    width: 50%;
+    height: auto;
+}
+#main-example > p {
+    align-self: center;
+}

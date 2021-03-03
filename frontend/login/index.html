@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <title>chatapp login</title>
+    <meta content="text/html;charset=UTF-8" http-equiv="Content-Type" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.5, user-scalable=no" />
+    <link rel="stylesheet" type="text/css" href="/css/login.css" />
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans&display=swap" rel="stylesheet" />
+</head>
+
+<body>
+    <header>
+        <nav id="nav">
+            <a id="chat-app" href="/">Chat App</a>
+            <div id="user-auth-actions">
+                <a href="/signup" id="signup">Login</a>
+            </div>
+        </nav>
+    </header>
+    <main>
+        <div id="login-wrapper">
+            <h2>Get Started</h2>
+            <form id="login" action="/login" method="post">
+                <div id="form-inputs">
+                    <div class="input-group">
+                        <label class="login-label" form="login" for="email">Email</label><br>
+                        <input class="login-input" form="login" id="email" name="email" type="email" required><br>
+                    </div>
+                    <div class="input-group">
+                        <label class="login-label" form="login" for="password">Password</label><br>
+                        <input class="login-input" form="login" id="password" name="password" type="password"
+                            minlength="8" maxlength="50" required><br>
+                    </div>
+                    <input id="submit-button" type="submit" value="Login">
+                </div>
+            </form>
+        </div>
+    </main>
+</body>
+
+</html>

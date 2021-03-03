@@ -1,0 +1,45 @@
+services:
+  frontend:
+    container_name: frontend
+    build: ./frontend
+    ports:
+      - "4000:4000"
+  postgres:
+    container_name: postgres
+    build: ./Postgres 
+    ports:
+      - 5432:5432
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-q", "-d", "postgres", "-U", "chat"]
+      timeout: 30s
+      interval: 10s
+      retries: 3
+    restart: always
+    volumes:
+    # can't be white space between the colon and value after
+      - pg_data:/var/lib/postgresql/data/
+  backend:
+    container_name: app
+    build: .
+    ports:
+      - 8000:8000
+    depends_on: 
+      - postgres
+      - scylla
+  scylla:
+    container_name: scylla
+    build: ./Scylla
+    ports:
+      - 7199:7199
+      - 9042:9042
+      - 7000:7000
+      - 7001:7001
+      - 9160:9160
+      - 10000:10000
+    volumes:
+      - scylla_data:/var/lib/scylladb/data/
+    mem_limit: 3g
+
+volumes:
+  pg_data:
+  scylla_data:
