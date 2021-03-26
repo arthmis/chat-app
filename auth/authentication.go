@@ -190,8 +190,10 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	}
 	session.Options = &sessions.Options{
 		Path:     "/",
-		MaxAge:   60 * 60 * 24 * 7,
-		HttpOnly: true,
+		MaxAge:   60 * 5,
+		Secure:   false,
+		HttpOnly: false,
+		SameSite: 4,
 	}
 
 	// todo: combine this with search for password to get username and password
@@ -266,6 +268,10 @@ func Logout(w http.ResponseWriter, req *http.Request) {
 func UserSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		session, err := database.PgStore.Get(req, "session-name")
+
+		username := session.Values["username"].(string)
+		log.Println(username)
+
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			log.Println("error getting session: ", err)

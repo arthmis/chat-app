@@ -10,8 +10,8 @@ import (
 )
 
 type UserMessage struct {
-	Message      string
-	MessageType  string
+	Message string
+	// MessageType  string
 	User         string
 	ChatroomName string
 }
@@ -38,6 +38,7 @@ func GetUserChatrooms(writer http.ResponseWriter, req *http.Request) {
 	}
 
 	username := session.Values["username"].(string)
+	log.Println(username)
 	stmt := "SELECT chatroom FROM users WHERE user = ?;"
 	values := []string{"user"}
 	query := ScyllaSession.Query(stmt, values)
@@ -83,3 +84,27 @@ func GetUserChatrooms(writer http.ResponseWriter, req *http.Request) {
 	writer.WriteHeader(http.StatusOK)
 	writer.Write(rowsJson)
 }
+
+// func GetCurrentRoomMessages(writer http.ResponseWriter, req *http.Request) {
+// 	session, err := database.PgStore.Get(req, "session-name")
+// 	if err != nil {
+// 		log.Println("error getting session name: ", err)
+// 		writer.WriteHeader(http.StatusInternalServerError)
+// 		return
+// 	}
+
+// 	username := session.Values["username"].(string)
+// 	log.Println(username)
+// 	stmt := "SELECT chatroom FROM users WHERE user = ?;"
+// 	values := []string{"user"}
+// 	query := ScyllaSession.Query(stmt, values)
+// 	query.Bind(username)
+
+// 	rowsJson, err := json.Marshal(GetChatrooms{Chatrooms: chatrooms, CurrentRoom: currentRoom})
+// 	if err != nil {
+// 		log.Println("Error marshalling row data: ", err)
+// 	}
+
+// 	writer.WriteHeader(http.StatusOK)
+// 	writer.Write(rowsJson)
+// }

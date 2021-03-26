@@ -1,6 +1,8 @@
-Scyla
+Scylla
 Postgres
 frontend
 .vscode
 .github
 .gitignore
+docker-compose.yml
+desktop_client

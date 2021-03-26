@@ -1,44 +1,69 @@
 services:
-  frontend:
-    container_name: frontend
-    build: ./frontend
-    ports:
-      - "4000:4000"
+  # frontend:
+  #   container_name: chat-frontend
+  #   build: ./frontend
+  #   ports:
+  #     - "4000:4000"
+  #   depends_on:
+  #     - backend
   postgres:
-    container_name: postgres
-    build: ./Postgres 
-    ports:
-      - 5432:5432
+    container_name: chat_postgres
+    image: postgres:10.12
     healthcheck:
       test: [ "CMD", "pg_isready", "-q", "-d", "postgres", "-U", "chat"]
       timeout: 30s
       interval: 10s
       retries: 3
     restart: always
+    ports:
+      - "5432:5432"
+    expose:
+      - "5432"
+    environment:
+      - "POSTGRES_USER:chat"
+      - "POSTGRES_PASSWORD:postgres"
+      - "POSTGRES_DB:chat"
     volumes:
     # can't be white space between the colon and value after
       - pg_data:/var/lib/postgresql/data/
-  backend:
-    container_name: app
-    build: .
-    ports:
-      - 8000:8000
-    depends_on: 
-      - postgres
-      - scylla
+  # backend:
+  #   container_name: app
+  #   build: .
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on: 
+  #     - postgres
+  #     - scylla
+  #   # restart: on-failure
   scylla:
     container_name: scylla
-    build: ./Scylla
+    # image: scylladb/scylla
+    image: cassandra:3.10
     ports:
-      - 7199:7199
-      - 9042:9042
-      - 7000:7000
-      - 7001:7001
-      - 9160:9160
-      - 10000:10000
+    #   - "7199:7199"
+      - "9042:9042"
+    #   - "7000:7000"
+    #   - "7001:7001"
+    #   - "9160:9160"
+    #   - "10000:10000"
+    expose:
+      - "7199"
+      - "9042"
+      - "7000"
+      - "7001"
+      - "10000"
+      - "9160"
     volumes:
       - scylla_data:/var/lib/scylladb/data/
-    mem_limit: 3g
+    mem_limit: 2g
+    healthcheck:
+      test: cqlsh
+      interval: 30s
+      timeout: 10s
+      start_period: 80s
+      retries: 3
+    # environment: 
+    #   - CASSANDRA_LISTEN_ADDRESS: scylla
 
 volumes:
   pg_data:

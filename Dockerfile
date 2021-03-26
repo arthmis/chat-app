@@ -4,11 +4,13 @@ WORKDIR /app
 
 COPY . .
 
+WORKDIR /app
+
 RUN go install 
-RUN go build
+RUN go build 
 
 # runs the main app
 ENTRYPOINT /app/chat
 
-EXPOSE 8000
+# EXPOSE 8000
 

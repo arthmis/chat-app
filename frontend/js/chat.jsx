@@ -1,8 +1,4 @@
 
-/* eslint-disable func-names */
-/* eslint-disable no-await-in-loop */
-/* eslint-disable no-console */
-/* eslint-disable prefer-arrow-callback */
 import React from 'react';
 import ReactDOM from 'react-dom';
 
@@ -141,9 +137,14 @@ class Messages extends React.Component {
 class Main extends React.Component {
     constructor(props) {
         super(props);
+        let webSocket = new WebSocket("ws://localhost:8000/ws");
+
+        webSocket.onerror = (ev) => {
+            console.log(ev);
+        };
 
         this.state = {
-            webSocket: new WebSocket("ws://localhost:8000/ws"),
+            webSocket: webSocket,
             rooms: [],
             current_room: "",
             current_room_message: [],
