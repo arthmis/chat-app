@@ -268,6 +268,11 @@ func Logout(w http.ResponseWriter, req *http.Request) {
 func UserSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		session, err := database.PgStore.Get(req, "session-name")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Println("Could not get session: ", err)
+			return
+		}
 
 		username := session.Values["username"].(string)
 		log.Println(username)

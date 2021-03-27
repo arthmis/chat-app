@@ -8,13 +8,13 @@ edition = "2018"
 
 [dependencies]
 druid = { git = "https://github.com/linebender/druid", features = ["im"]}
-reqwest = { version = "0.11.2", features = ["cookies", "gzip", "json"] }
+reqwest = { version = "0.11.2", features = ["cookies", "gzip", "json", "multipart"] }
 serde = "1"
 tokio-tungstenite = "0.14.0"
 tokio = { version = "1", features = ["io-util"]}
-# futures-sink = "*"
 futures-util = "*"
 serde_json = "1"
+http = "0.2.3"
 
 [dependencies.async-std]
 version = "1"

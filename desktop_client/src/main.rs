@@ -9,11 +9,14 @@ use std::{
 use async_std::task;
 use druid::{
     im::HashMap,
-    widget::{Button, Container, Controller, Flex, Label, List, Split, TextBox},
-    AppLauncher, Color, Data, Event, Lens, Widget, WidgetExt, WindowDesc,
+    widget::{
+        Button, Container, Controller, Flex, Label, List, Scope, ScopeTransfer, Split, TextBox,
+    },
+    AppLauncher, Color, Command, Data, Event, Lens, Point, Selector, SingleUse, Target, Widget,
+    WidgetExt, WindowConfig, WindowDesc, WindowLevel, WindowSizePolicy,
 };
 use futures_util::{SinkExt, StreamExt};
-use reqwest::{redirect::Policy, Client, ClientBuilder};
+use reqwest::{cookie::Cookie, multipart::Form, redirect::Policy, Client, ClientBuilder, Method};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
@@ -34,6 +37,8 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     //     (client, res)
     // });
     // dbg!(res?);
+
+    // login
     let (client, res) = task::block_on(async {
         let mut map = StdMap::new();
         map.insert("email", "kupa@gmail.com");
@@ -45,8 +50,12 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .await;
         (client, res)
     });
-    // dbg!(res?);
-    res?;
+    let res = res?;
+    let cookies = res.cookies().collect::<Vec<Cookie>>();
+    let stored_cookie = cookies[0].value().to_string();
+    // dbg!(cookies);
+
+    // get user's chatrooms
     let (client, res) = task::block_on(async {
         // let mut map = StdMap::new();
         // map.insert("email", "kupa@gmail.com");
@@ -61,29 +70,23 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .await;
         (client, res)
     });
-    dbg!(&res?);
+    // dbg!(&res?);
+
+    // establish websocket connection
     let (client, res) = task::block_on(async {
-        // let mut map = StdMap::new();
-        // map.insert("email", "kupa@gmail.com");
-        // map.insert("password", "secretpassy");
-        let res = connect_async("ws://localhost:8000/ws").await;
-        // let client = client_async(
-        //     "http://localhost:8000/ws",
-        //     stream.get_mut(), // BufWriter::new(Vec::new()),
-        // )
-        // .await;
-        // let res = client
-        //     .get("http://localhost:8000/ws")
-        //     .send()
-        //     .await;
-        // .unwrap()
-        // .json::<ChatroomInfo>()
-        // .await;
+        let req = http::request::Builder::new()
+            .method(Method::GET)
+            .uri("ws://localhost:8000/ws")
+            .header("Cookie", format!("{}={}", "session-name", stored_cookie))
+            .body(())
+            .unwrap();
+        let res = connect_async(req).await;
         (client, res)
     });
     let (stream, res) = res.unwrap();
     dbg!(&res);
     // res?;
+
     let window = WindowDesc::new(ui()).title("Rume");
     let app_state = AppState::new(HashMap::new(), Arc::new(Vec::new()), client, stream);
     AppLauncher::with_window(window)
@@ -113,7 +116,6 @@ struct AppState {
     rooms: Arc<Vec<String>>,
     selected_room: usize,
     http_client: Arc<Client>,
-    // ws: Arc<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     #[data(ignore)]
     channel: Sender<String>,
     textbox: String,
@@ -216,7 +218,28 @@ fn ui() -> impl Widget<AppState> {
         List::new(|| Label::dynamic(|room_name: &String, _env| room_name.to_string()).padding(5.0))
             .lens(AppState::rooms);
     let invite = Button::new("Invite");
-    let create = Button::new("Create");
+    let create = Button::new("Create").on_click(|ctx, data: &mut AppState, env| {
+        // dbg!(&data);
+        let origin = {
+            let window_origin = ctx.window_origin();
+            // dbg!(window_origin);
+            let size = ctx.window().get_size();
+            // dbg!(size);
+            Point::new(
+                // window_origin.x + size.width / 2.,
+                // window_origin.y + size.height / 2.,
+                size.width / 2.,
+                size.height / 2.,
+            )
+        };
+        let config = WindowConfig::default()
+            .set_level(WindowLevel::Modal)
+            .show_titlebar(true)
+            .resizable(false)
+            .window_size_policy(WindowSizePolicy::Content)
+            .set_position(origin);
+        let subwindow = ctx.new_sub_window(config, create_room(), data.clone(), env.clone());
+    });
     let buttons = Flex::row().with_child(invite).with_child(create).center();
     let left = Flex::column()
         .with_flex_child(rooms, 3.0)
@@ -252,52 +275,15 @@ impl Controller<String, TextBox<String>> for TextboxController {
         env: &druid::Env,
     ) {
         if let Event::KeyDown(key_info) = event {
-            dbg!(key_info);
+            // dbg!(key_info);
         }
         child.event(ctx, event, data, env)
     }
-
-    // fn lifecycle(
-    //     &mut self,
-    //     child: &mut TextBox<String>,
-    //     ctx: &mut druid::LifeCycleCtx,
-    //     event: &druid::LifeCycle,
-    //     data: &String,
-    //     env: &druid::Env,
-    // ) {
-    //     child.lifecycle(ctx, event, data, env)
-    // }
-
-    // fn update(&mut self, child: &mut TextBox<String>, ctx: &mut druid::UpdateCtx, old_data: &String, data: &String, env: &druid::Env) {
-    //     child.update(ctx, old_data, data, env)
-    // }
 }
 
 struct AppStateController;
 
 impl Controller<AppState, Container<AppState>> for AppStateController {
-    // fn event(
-    //     &mut self,
-    //     child: &mut Container<AppState>,
-    //     ctx: &mut druid::EventCtx,
-    //     event: &Event,
-    //     data: &mut AppState,
-    //     env: &druid::Env,
-    // ) {
-    //     child.event(ctx, event, data, env)
-    // }
-
-    // fn lifecycle(
-    //     &mut self,
-    //     child: &mut Container<AppState>,
-    //     ctx: &mut druid::LifeCycleCtx,
-    //     event: &druid::LifeCycle,
-    //     data: &AppState,
-    //     env: &druid::Env,
-    // ) {
-    //     child.lifecycle(ctx, event, data, env)
-    // }
-
     fn update(
         &mut self,
         child: &mut Container<AppState>,
@@ -315,5 +301,77 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
             }
         }
         child.update(ctx, old_data, data, env)
+    }
+}
+
+const CREATE_ROOM: Selector<SingleUse<String>> = Selector::new("app-create-room");
+fn create_room() -> impl Widget<AppState> {
+    let directions = Label::new("Create your new chatroom");
+    let label = Label::new("CHATROOM NAME").with_text_size(12.);
+    let textbox = TextBox::new().lens(InviteState::room_name);
+    let create = Button::new("Create").on_click(|ctx, data: &mut InviteState, _env| {
+        let res = task::block_on(async {
+            let mut map = StdMap::new();
+            map.insert("chatroom_name", data.room_name.clone());
+            let form = Form::new().text("chatroom_name", data.room_name.clone());
+            data.client
+                .post("http://localhost:8000/create-room")
+                // .form(&map)
+                .multipart(form)
+                .send()
+                .await
+                .unwrap()
+            // .json::<String>()
+        });
+        if res.status() == 202 {
+            dbg!(res.status());
+        } else {
+            dbg!(res.status());
+        }
+        ctx.submit_command(Command::new(
+            CREATE_ROOM,
+            SingleUse::new(data.room_name.clone()),
+            Target::Auto,
+        ));
+        ctx.window().close();
+    });
+    let layout = Flex::column()
+        .with_child(directions)
+        .with_spacer(40.)
+        .with_child(label)
+        .with_child(textbox)
+        .with_child(create);
+    let layout = layout.fix_height(500.).width(500.).padding(50.);
+    Scope::from_function(InviteState::from_app_state, InviteTransfer, layout)
+}
+
+#[derive(Debug, Data, Lens, Clone)]
+struct InviteState {
+    #[data(ignore)]
+    client: Arc<Client>,
+    room_name: String,
+}
+
+impl InviteState {
+    fn from_app_state(data: AppState) -> Self {
+        Self {
+            client: data.http_client,
+            room_name: "".to_string(),
+        }
+    }
+}
+
+struct InviteTransfer;
+
+impl ScopeTransfer for InviteTransfer {
+    type In = AppState;
+    type State = InviteState;
+
+    fn read_input(&self, state: &mut Self::State, inner: &Self::In) {
+        // todo!()
+    }
+
+    fn write_back_input(&self, state: &Self::State, inner: &mut Self::In) {
+        // todo!()
     }
 }

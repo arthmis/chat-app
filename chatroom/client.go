@@ -1,6 +1,7 @@
 package chatroom
 
 import (
+	"chat/database"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -23,22 +24,22 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 
 	defer conn.Close()
 
-	// session, err := database.PgStore.Get(req, "session-name")
-	// if err != nil {
-	// 	log.Println("err getting session name: ", err)
-	// }
-	// clientName := session.Values["username"].(string)
+	session, err := database.PgStore.Get(req, "session-name")
+	if err != nil {
+		log.Println("err getting session name: ", err)
+	}
+	clientName := session.Values["username"].(string)
 
-	// if err != nil {
-	// 	log.Println("could not parse Message struct")
-	// }
+	if err != nil {
+		log.Println("could not parse Message struct")
+	}
 	// TODO: function that retrieves chatrooms user is part of and joins them
-	// chatUser := User{
-	// 	Conn:      conn,
-	// 	Id:        clientName,
-	// 	Chatrooms: make([]string, 0),
-	// }
-	// Clients[clientName] = &chatUser
+	chatUser := User{
+		Conn:      conn,
+		Id:        clientName,
+		Chatrooms: make([]string, 0),
+	}
+	Clients[clientName] = &chatUser
 
 	for {
 		messageType, message, err := conn.ReadMessage()
@@ -57,7 +58,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 			break
 		}
 
-		userMessage.User = "Art"
+		userMessage.User = chatUser.Id
 
 		fmt.Println("message type: ", messageType)
 		spew.Dump(userMessage)

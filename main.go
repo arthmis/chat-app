@@ -172,7 +172,7 @@ func main() {
 	router.With(auth.UserSession).Get("/chat", chat)
 	// router.Handle("/", http.FileServer(http.Dir("./frontend")))
 	// router.With(auth.UserSession).Get("/ws", chatroom.OpenWsConnection)
-	router.Get("/ws", chatroom.OpenWsConnection)
+	router.With(auth.UserSession).Get("/ws", chatroom.OpenWsConnection)
 	// add validation middleware
 	// TODO turn create-room into /room/create and the other ones too
 	router.With(auth.UserSession).Post("/create-room", chatroom.Create)
