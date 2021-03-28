@@ -84,11 +84,23 @@ func init() {
 			expires TIMESTAMPTZ NOT NULL
 		)`,
 	)
-	log.Println("Postgres database has been initialized.")
 
 	if err != nil {
 		log.Fatalln("Problem creating Invites table: ", err)
 	}
+
+	_, err = database.PgDB.Exec(
+		`CREATE TABLE IF NOT EXISTS Rooms (
+			id serial PRIMARY KEY,
+			name TEXT NOT NULL
+		)`,
+	)
+
+	if err != nil {
+		log.Fatalln("Problem creating Rooms table: ", err)
+	}
+
+	log.Println("Postgres database has been initialized.")
 
 	go chatroom.RemoveExpiredInvites(database.PgDB, time.Minute*10)
 
@@ -154,6 +166,40 @@ func init() {
 			StartTime: time.Unix(0, 0),
 		},
 	)
+
+	rows, err := database.PgDB.Query(
+		`SELECT name FROM Rooms`,
+	)
+	if err != nil {
+		log.Fatalln("couldn't get room rows", err)
+	}
+
+	// initialize chatrooms
+	for {
+		if rows.Next() {
+			var name string
+			err = rows.Scan(&name)
+			if err != nil {
+				log.Fatalln("couldn't scan row: ", err)
+			}
+
+			room := chatroom.NewChatroom()
+			room.Id = name
+			room.ScyllaSession = &chatroom.ScyllaSession
+			room.Snowflake = chatroom.Snowflake
+			room.Users = make([]*chatroom.User, 0)
+			room.Messages = make([]chatroom.UserMessage, 20)
+			room.Channel = make(chan chatroom.UserMessage)
+
+			chatroom.Chatrooms[room.Id] = room
+			chatroom.ChatroomChannels[room.Id] = room.Channel
+
+			go room.Run()
+		} else {
+			break
+		}
+	}
+	log.Println("Chatrooms initialized.")
 }
 
 func main() {
@@ -184,7 +230,7 @@ func main() {
 	// router.With(auth.UserSession).Post("/users/chatrooms", chatroom.GetUserChatrooms)
 	router.Route("/user", func(router chi.Router) {
 		router.With(auth.UserSession).Post("/chatrooms", chatroom.GetUserChatrooms)
-		// router.With(auth.UserSession).Post("/current-room", chatroom.GetCurrentRoomMessages)
+		router.With(auth.UserSession).Post("/current-room", chatroom.GetCurrentRoomMessages)
 		// router.With(auth.UserSession).Post("/", user.GetUser)
 	})
 

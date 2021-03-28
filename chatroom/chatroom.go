@@ -56,7 +56,7 @@ type Chatroom struct {
 	Snowflake     *sonyflake.Sonyflake
 }
 
-var chatrooms = make(map[string]*Chatroom)
+var Chatrooms = make(map[string]*Chatroom)
 var ChatroomChannels = make(map[string]chan UserMessage)
 var Snowflake *sonyflake.Sonyflake
 var ScyllaSession gocqlx.Session
@@ -64,7 +64,7 @@ var ScyllaSession gocqlx.Session
 func (room *Chatroom) Run() {
 	for {
 		newMessage := <-room.Channel
-		room.Messages = append(room.Messages, newMessage)
+		// room.Messages = append(room.Messages, newMessage)
 		err := room.saveMessage(newMessage)
 		if err != nil {
 			log.Println("error saving message: ", err)
@@ -165,7 +165,7 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 	Clients[username].Chatrooms = append(Clients[username].Chatrooms, room.Id)
 	room.Users = append(room.Users, Clients[session.Values["username"].(string)])
 	ChatroomChannels[room.Id] = room.Channel
-	chatrooms[room.Id] = room
+	Chatrooms[room.Id] = room
 
 	go room.Run()
 
@@ -300,7 +300,7 @@ func Join(writer http.ResponseWriter, req *http.Request) {
 
 	user := session.Values["username"].(string)
 
-	chatrooms[chatroomName].Users = append(chatrooms[chatroomName].Users, Clients[user])
+	Chatrooms[chatroomName].Users = append(Chatrooms[chatroomName].Users, Clients[user])
 	// todo add chatroom to user also
 
 	// writer.WriteHeader(http.StatusInternalServerError)

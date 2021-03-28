@@ -3,7 +3,6 @@ package chatroom
 import (
 	"chat/database"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 
@@ -42,32 +41,38 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 	Clients[clientName] = &chatUser
 
 	for {
-		messageType, message, err := conn.ReadMessage()
+		// messageType, message, err := conn.ReadMessage()
+		_, message, err := conn.ReadMessage()
 
-		spew.Dump(messageType, message)
-		println(message)
 		if err != nil {
 			log.Println("connection closed: ", err)
 			break
 		}
-		userMessage := UserMessage{}
+		// spew.Dump(messageType, message)
+		// println(message)
+		// userMessage := UserMessage{}
+		testMessage := TestMessage{}
 
-		err = json.Unmarshal([]byte(message), &userMessage)
+		err = json.Unmarshal([]byte(message), &testMessage)
 		if err != nil {
 			log.Println("error json parsing user message: ", err)
 			break
 		}
 
+		userMessage := UserMessage{}
 		userMessage.User = chatUser.Id
+		userMessage.Message = testMessage.Message
+		userMessage.ChatroomName = testMessage.ChatroomName
 
-		fmt.Println("message type: ", messageType)
-		spew.Dump(userMessage)
-		fmt.Println()
+		// fmt.Println("message type: ", messageType)
+		// spew.Dump(userMessage)
+		// fmt.Println()
+		spew.Dump(ChatroomChannels)
 		ChatroomChannels[userMessage.ChatroomName] <- userMessage
-		if err != nil {
-			log.Println("could not parse Message struct: ", err)
-			break
-		}
+		// if err != nil {
+		// 	log.Println("could not parse Message struct: ", err)
+		// 	break
+		// }
 	}
-	// delete(Clients, clientName)
+	delete(Clients, clientName)
 }
