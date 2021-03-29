@@ -39,6 +39,24 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 		Chatrooms: make([]string, 0),
 	}
 	Clients[clientName] = &chatUser
+	stmt := "SELECT chatroom FROM users WHERE user = ?;"
+	values := []string{"user"}
+	query := ScyllaSession.Query(stmt, values)
+	query.Bind(clientName)
+
+	var chatrooms []string
+	err = query.SelectRelease(&chatrooms)
+	if err != nil {
+		// TODO: Figure out why i'm doing this
+		if err.Error() != "" {
+			log.Println("Error finding all chatrooms for user: ", err)
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
+	for _, name := range chatrooms {
+		Chatrooms[name].addUser(conn, clientName)
+	}
 
 	for {
 		// messageType, message, err := conn.ReadMessage()

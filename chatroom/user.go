@@ -28,13 +28,18 @@ type User struct {
 	Chatrooms []string
 }
 
+type ChatroomClient struct {
+	Conn *websocket.Conn
+	Id   string
+}
+
 type UserChatrooms struct {
 	User            string
 	CurrentChatroom string
 	Chatroom        string
 }
 
-func GetUserChatrooms(writer http.ResponseWriter, req *http.Request) {
+func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
@@ -78,11 +83,12 @@ func GetUserChatrooms(writer http.ResponseWriter, req *http.Request) {
 	}
 
 	type GetChatrooms struct {
+		User        string   `json:"user"`
 		Chatrooms   []string `json:"chatrooms"`
 		CurrentRoom string   `json:"current_room"`
 	}
 
-	rowsJson, err := json.Marshal(GetChatrooms{Chatrooms: chatrooms, CurrentRoom: currentRoom})
+	rowsJson, err := json.Marshal(GetChatrooms{User: username, Chatrooms: chatrooms, CurrentRoom: currentRoom})
 	if err != nil {
 		log.Println("Error marshalling row data: ", err)
 	}
@@ -109,6 +115,7 @@ func GetCurrentRoomMessages(w http.ResponseWriter, req *http.Request) {
 	room_name := req.PostFormValue("chatroom_name")
 
 	username := session.Values["username"].(string)
+	log.Println(room_name)
 	log.Println(username)
 	stmt := "SELECT content FROM messages WHERE chatroom_name = ?;"
 	values := []string{"chatroom_name"}
@@ -116,7 +123,8 @@ func GetCurrentRoomMessages(w http.ResponseWriter, req *http.Request) {
 	query.Bind(room_name)
 
 	room_messages := []string{}
-	err = query.GetRelease(&room_messages)
+	// err = query.GetRelease(&room_messages)
+	err = query.SelectRelease(&room_messages)
 	if err != nil {
 		if err.Error() != "not found" {
 			log.Println("Error getting current chatroom for user: ", err)

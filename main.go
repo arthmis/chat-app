@@ -187,7 +187,8 @@ func init() {
 			room.Id = name
 			room.ScyllaSession = &chatroom.ScyllaSession
 			room.Snowflake = chatroom.Snowflake
-			room.Users = make([]*chatroom.User, 0)
+			// room.Clients = make([]*chatroom.User, 0)
+			room.Clients = []*chatroom.ChatroomClient{}
 			room.Messages = make([]chatroom.UserMessage, 20)
 			room.Channel = make(chan chatroom.UserMessage)
 
@@ -229,7 +230,7 @@ func main() {
 	// router.With(auth.UserSession).Post("/users/chatrooms", chatroom.GetUserChatrooms)
 	// router.With(auth.UserSession).Post("/users/chatrooms", chatroom.GetUserChatrooms)
 	router.Route("/user", func(router chi.Router) {
-		router.With(auth.UserSession).Post("/chatrooms", chatroom.GetUserChatrooms)
+		router.With(auth.UserSession).Post("/chatrooms", chatroom.GetUserInfo)
 		router.With(auth.UserSession).Post("/current-room", chatroom.GetCurrentRoomMessages)
 		// router.With(auth.UserSession).Post("/", user.GetUser)
 	})

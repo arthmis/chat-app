@@ -47,8 +47,8 @@ type ChatroomUser struct {
 	Conn *websocket.Conn
 }
 type Chatroom struct {
-	Id    string
-	Users []*User
+	Id      string
+	Clients []*ChatroomClient
 	// get rid of messages field, not necessary
 	Messages      []UserMessage
 	Channel       chan UserMessage
@@ -61,6 +61,10 @@ var ChatroomChannels = make(map[string]chan UserMessage)
 var Snowflake *sonyflake.Sonyflake
 var ScyllaSession gocqlx.Session
 
+func (room *Chatroom) addUser(conn *websocket.Conn, user string) {
+	client := ChatroomClient{Conn: conn, Id: user}
+	room.Clients = append(room.Clients, &client)
+}
 func (room *Chatroom) Run() {
 	for {
 		newMessage := <-room.Channel
@@ -73,8 +77,8 @@ func (room *Chatroom) Run() {
 		if err != nil {
 			log.Println(err)
 		}
-		for i := range room.Users {
-			err = room.Users[i].Conn.WriteMessage(websocket.TextMessage, bytes)
+		for i := range room.Clients {
+			err = room.Clients[i].Conn.WriteMessage(websocket.TextMessage, bytes)
 			if err != nil {
 				log.Println("error writing message to user ws connection: ", err)
 			}
@@ -109,7 +113,7 @@ func (room *Chatroom) saveMessage(chatMessage UserMessage) error {
 func NewChatroom() *Chatroom {
 	room := new(Chatroom)
 	room.Id = ""
-	room.Users = make([]*User, 0)
+	room.Clients = make([]*ChatroomClient, 0)
 	room.Messages = make([]UserMessage, 20)
 	room.Channel = make(chan UserMessage)
 	return room
@@ -163,7 +167,9 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 	}
 
 	Clients[username].Chatrooms = append(Clients[username].Chatrooms, room.Id)
-	room.Users = append(room.Users, Clients[session.Values["username"].(string)])
+	user := session.Values["username"].(string)
+	client := ChatroomClient{Id: Clients[user].Id, Conn: Clients[user].Conn}
+	room.Clients = append(room.Clients, &client)
 	ChatroomChannels[room.Id] = room.Channel
 	Chatrooms[room.Id] = room
 
@@ -299,8 +305,9 @@ func Join(writer http.ResponseWriter, req *http.Request) {
 	}
 
 	user := session.Values["username"].(string)
+	client := ChatroomClient{Id: Clients[user].Id, Conn: Clients[user].Conn}
 
-	Chatrooms[chatroomName].Users = append(Chatrooms[chatroomName].Users, Clients[user])
+	Chatrooms[chatroomName].Clients = append(Chatrooms[chatroomName].Clients, &client)
 	// todo add chatroom to user also
 
 	// writer.WriteHeader(http.StatusInternalServerError)
