@@ -83,7 +83,7 @@ func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 	}
 
 	type GetChatrooms struct {
-		User        string   `json:"user"`
+		User        string   `json:"name"`
 		Chatrooms   []string `json:"chatrooms"`
 		CurrentRoom string   `json:"current_room"`
 	}

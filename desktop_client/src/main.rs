@@ -9,7 +9,6 @@ use std::{
 use async_std::task;
 use druid::{
     im::HashMap,
-    lens,
     widget::{
         Button, Container, Controller, Flex, Label, List, ListIter, Painter, Scope, ScopeTransfer,
         Split, TextBox,
@@ -83,7 +82,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .collect::<Vec<Room>>();
 
     let selected_room = res.current_room;
-    let selected_room_idx = { rooms.iter().position(|room| &room.name == &selected_room) }.unwrap();
+    let selected_room_idx = { rooms.iter().position(|room| room.name == selected_room) }.unwrap();
 
     // get user's current room messages
     let (client, res) = task::block_on(async {
@@ -140,7 +139,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 #[derive(Deserialize, Debug, Clone, Data, Lens)]
 struct UserInfo {
     // #[serde(rename = "User")]
-    user: String,
+    name: String,
     // #[serde(rename = "Chatrooms")]
     #[data(ignore)]
     chatrooms: Option<Vec<String>>,
@@ -163,7 +162,7 @@ struct AppState {
     selected_room: usize,
     http_client: Arc<Client>,
     #[data(ignore)]
-    channel: Sender<String>,
+    channel: Sender<ChatMessage>,
     textbox: String,
     user: UserInfo,
 }
@@ -174,10 +173,10 @@ struct Room {
     idx: usize,
 }
 
-struct User {
-    name: String,
-    chatrooms: std::collections::HashSet<String>,
-}
+// struct User {
+//     name: String,
+//     chatrooms: std::collections::HashSet<String>,
+// }
 
 impl AppState {
     fn new(
@@ -192,23 +191,13 @@ impl AppState {
         let (tx, rx) = std::sync::mpsc::channel();
         let (mut write, mut read) = ws.split();
 
+        // spawns thread to write messages
         thread::spawn(move || {
             task::block_on(async {
                 loop {
                     match rx.recv() {
-                        Ok(bytes) => {
-                            dbg!(&bytes);
-                            let message = {
-                                let message = ChatMessage {
-                                    user: "art".to_string(),
-                                    room: "Another room".to_string(),
-                                    message: bytes,
-                                };
-                                let message = serde_json::to_string(&message);
-                                // let bytes = bytes.as_bytes();
-
-                                Message::Text(message.unwrap())
-                            };
+                        Ok(message) => {
+                            let message = Message::Text(serde_json::to_string(&message).unwrap());
                             write.send(message).await.unwrap();
                         }
                         Err(err) => println!("{}", err),
@@ -216,6 +205,8 @@ impl AppState {
                 }
             });
         });
+
+        // spawns thread to read messages
         thread::spawn(move || {
             task::block_on(async {
                 loop {
@@ -315,11 +306,13 @@ fn ui() -> impl Widget<AppState> {
                 ctx.stroke(rect, &background_color, 1.);
                 ctx.fill(rect, &background_color);
             }))
-            .on_click(|ctx, data, env| {
-                // dbg!("clicked on room", data.1);
-                let (room, selected) = data;
-                let new_data = (room.to_owned(), room.idx);
-                *data = new_data;
+            .on_click(|ctx, data, _env| {
+                let (room, _selected) = data;
+                ctx.submit_command(Command::new(
+                    CHANGING_ROOM,
+                    (room.idx, data.0.name.clone()),
+                    Target::Auto,
+                ));
             })
     })
     .scroll()
@@ -346,7 +339,7 @@ fn ui() -> impl Widget<AppState> {
             .resizable(false)
             .window_size_policy(WindowSizePolicy::Content)
             .set_position(origin);
-        let subwindow = ctx.new_sub_window(config, create_room(), data.clone(), env.clone());
+        let _subwindow = ctx.new_sub_window(config, create_room(), data.clone(), env.clone());
     });
     let buttons = Flex::row().with_child(invite).with_child(create).center();
     let left = Flex::column()
@@ -410,25 +403,6 @@ impl Controller<String, TextBox<String>> for TextboxController {
 struct AppStateController;
 
 impl Controller<AppState, Container<AppState>> for AppStateController {
-    fn update(
-        &mut self,
-        child: &mut Container<AppState>,
-        ctx: &mut druid::UpdateCtx,
-        old_data: &AppState,
-        data: &AppState,
-        env: &druid::Env,
-    ) {
-        // if !data.textbox.same(&old_data.textbox) {
-        //     match data.channel.send(data.textbox.to_string()) {
-        //         Ok(_) => (),
-        //         Err(err) => {
-        //             println!("{}", err);
-        //         }
-        //     }
-        // }
-        child.update(ctx, old_data, data, env)
-    }
-
     fn event(
         &mut self,
         child: &mut Container<AppState>,
@@ -440,20 +414,55 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
         match event {
             Event::Command(selector) if selector.is(SEND_MESSAGE) => {
                 let message = selector.get_unchecked(SEND_MESSAGE).take().unwrap();
-                // dbg!(message);
+                let message = ChatMessage {
+                    user: data.user.name.to_owned(),
+                    room: data.rooms[data.selected_room].name.clone(),
+                    message,
+                };
+
                 match data.channel.send(message) {
                     Ok(_) => (),
                     Err(err) => {
                         println!("{}", err);
                     }
                 }
+
                 data.textbox.clear();
             }
             Event::Command(selector) if selector.is(RECEIVE_MESSAGE) => {
                 let message = selector.get_unchecked(RECEIVE_MESSAGE).take().unwrap();
+                // dbg!(&data.chatrooms);
                 let messages = Arc::make_mut(&mut data.chatrooms[&message.room]);
                 messages.push(message.message);
                 data.chatrooms[&message.room] = Arc::new(messages.to_owned());
+            }
+            Event::Command(selector) if selector.is(CHANGING_ROOM) => {
+                let (new_selected, room_name) = selector.get_unchecked(CHANGING_ROOM);
+                // get room's messages
+                // let (client, res) = task::block_on(async {
+                if !data.chatrooms.contains_key(room_name) {
+                    let res = task::block_on(async {
+                        let mut map = StdMap::new();
+                        let room = room_name.to_owned();
+                        map.insert("chatroom_name", &room);
+                        // map.insert("password", "secretpassy");
+                        let client = &data.http_client;
+                        client
+                            .post("http://localhost:8000/user/current-room")
+                            .form(&map)
+                            .send()
+                            .await
+                            .unwrap()
+                            .json::<Vec<String>>()
+                            .await
+                    });
+                    // dbg!(&res);
+                    let messages = res.unwrap().into_iter().rev().collect::<Vec<String>>();
+                    let _room_messages = data
+                        .chatrooms
+                        .insert(room_name.to_owned(), Arc::new(messages));
+                }
+                data.selected_room = *new_selected;
             }
             _ => (),
         }
@@ -461,7 +470,9 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
     }
 }
 
+const CHANGING_ROOM: Selector<(usize, String)> = Selector::new("app-change-room");
 const CREATE_ROOM: Selector<SingleUse<String>> = Selector::new("app-create-room");
+
 fn create_room() -> impl Widget<AppState> {
     let directions = Label::new("Create your new chatroom");
     let label = Label::new("CHATROOM NAME").with_text_size(12.);
@@ -524,11 +535,11 @@ impl ScopeTransfer for InviteTransfer {
     type In = AppState;
     type State = InviteState;
 
-    fn read_input(&self, state: &mut Self::State, inner: &Self::In) {
+    fn read_input(&self, _state: &mut Self::State, _inner: &Self::In) {
         // todo!()
     }
 
-    fn write_back_input(&self, state: &Self::State, inner: &mut Self::In) {
+    fn write_back_input(&self, _state: &Self::State, _inner: &mut Self::In) {
         // todo!()
     }
 }
@@ -544,6 +555,7 @@ impl ListIter<(Room, usize)> for AppState {
     fn for_each_mut(&mut self, mut cb: impl FnMut(&mut (Room, usize), usize)) {
         let mut new_data = Vec::with_capacity(self.data_len());
         let mut any_changed = false;
+        let mut new_selected = self.selected_room;
 
         for (i, item) in self.rooms.iter().enumerate() {
             let mut d = (item.to_owned(), self.selected_room);
@@ -552,12 +564,15 @@ impl ListIter<(Room, usize)> for AppState {
             // if !any_changed && !(*item, i, self.selected_room).same(&d) {
             if !any_changed && !self.selected_room.same(&d.1) {
                 any_changed = true;
+                new_selected = d.1;
             }
+            // dbg!(any_changed);
             new_data.push(d.0);
         }
 
         if any_changed {
             self.rooms = Arc::new(new_data);
+            self.selected_room = new_selected;
         }
     }
 
