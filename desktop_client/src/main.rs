@@ -10,11 +10,12 @@ use async_std::task;
 use druid::{
     im::HashMap,
     widget::{
-        Button, Container, Controller, Flex, Label, List, ListIter, Painter, Scope, ScopeTransfer,
-        Split, TextBox,
+        Button, Container, Controller, Flex, Label, List, ListIter, MainAxisAlignment, Painter,
+        Scope, ScopeTransfer, Split, TextBox,
     },
-    AppLauncher, Color, Command, Data, Event, ExtEventSink, Lens, Point, RenderContext, Selector,
-    SingleUse, Target, Widget, WidgetExt, WindowConfig, WindowDesc, WindowLevel, WindowSizePolicy,
+    AppLauncher, Code, Color, Command, Data, Event, ExtEventSink, Lens, Point, RenderContext,
+    Selector, SingleUse, Target, Widget, WidgetExt, WindowConfig, WindowDesc, WindowLevel,
+    WindowSizePolicy,
 };
 use futures_util::{SinkExt, StreamExt};
 use reqwest::{cookie::Cookie, multipart::Form, redirect::Policy, Client, ClientBuilder, Method};
@@ -285,6 +286,8 @@ fn ui() -> impl Widget<AppState> {
         // Label::dynamic(|(room, selected_room), _env| room.name.to_string())
         Label::dynamic(|data: &(Room, usize), _env| data.0.name.to_string())
             .with_text_color(Color::BLACK)
+            .center()
+            .expand_width()
             .padding(5.0)
             .background(Painter::new(|ctx, data: &(Room, usize), _env| {
                 let is_hot = ctx.is_hot();
@@ -292,10 +295,10 @@ fn ui() -> impl Widget<AppState> {
                 let (room, selected) = data;
                 let is_selected = room.idx == *selected;
 
-                let background_color = if is_hot {
-                    Color::BLUE
-                } else if is_active {
+                let background_color = if is_active {
                     Color::GREEN
+                } else if is_hot {
+                    Color::BLUE
                 } else if is_selected {
                     Color::GRAY
                 } else {
@@ -343,8 +346,9 @@ fn ui() -> impl Widget<AppState> {
     });
     let buttons = Flex::row().with_child(invite).with_child(create).center();
     let left = Flex::column()
-        .with_flex_child(rooms, 3.0)
+        .with_flex_child(rooms.scroll().vertical(), 9.0)
         .with_flex_child(buttons, 1.0)
+        .main_axis_alignment(MainAxisAlignment::SpaceBetween)
         .expand_height();
 
     let textbox = TextBox::new()
@@ -359,8 +363,24 @@ fn ui() -> impl Widget<AppState> {
             Target::Auto,
         ));
     });
-    let message_box = Flex::row().with_child(textbox).with_child(send_message);
+    let message_box = Flex::row()
+        .with_child(textbox)
+        .with_child(send_message)
+        .main_axis_alignment(MainAxisAlignment::Center)
+        .expand_width()
+        .height(40.)
+        .center();
+
     let messages = List::new(|| {
+        // let user = Label::dynamic(|room_name: &ChatMessage, _env| room_name.to_string())
+        //     .with_text_color(Color::BLACK)
+        //     .padding(5.0);
+
+        // let message = Label::dynamic(|room_name: &ChatMessage, _env| room_name.to_string())
+        //     .with_text_color(Color::BLACK)
+        //     .padding(5.0);
+
+        // Flex::column().with_child(user).with_child(message)
         Label::dynamic(|room_name: &String, _env| room_name.to_string())
             .with_text_color(Color::BLACK)
             .padding(5.0)
@@ -368,10 +388,12 @@ fn ui() -> impl Widget<AppState> {
     .lens(ChatroomsLens)
     .scroll()
     .vertical()
-    .expand();
+    .expand()
+    .padding(5.0);
     let right = Flex::column()
-        .with_flex_child(messages, 4.0)
-        .with_flex_child(message_box, 1.0);
+        .with_flex_child(messages, 9.0)
+        // .with_flex_child(message_box, 1.0);
+        .with_child(message_box);
 
     Split::columns(left, right)
         .solid_bar(true)
@@ -394,7 +416,17 @@ impl Controller<String, TextBox<String>> for TextboxController {
         env: &druid::Env,
     ) {
         if let Event::KeyDown(key_info) = event {
-            // dbg!(key_info);
+            if let Code::Enter = key_info.code {
+                ctx.submit_command(Command::new(
+                    SEND_MESSAGE,
+                    SingleUse::new(data.clone()),
+                    Target::Auto,
+                ));
+                data.clear();
+                // don't want textbox to handle any events
+                // because Enter was pressed and message was sent
+                return;
+            }
         }
         child.event(ctx, event, data, env)
     }
