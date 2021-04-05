@@ -212,27 +212,23 @@ func main() {
 	// router.Get("/", func(w http.ResponseWriter, req *http.Request) {
 	// 	w.WriteHeader(200)
 	// })
-	router.Post("/signup", auth.Signup)
-	// add validation middleware
-	router.Post("/login", auth.Login)
-	router.With(auth.UserSession).Post("/logout", auth.Logout)
-	router.With(auth.UserSession).Get("/chat", chat)
-	// router.Handle("/", http.FileServer(http.Dir("./frontend")))
-	// router.With(auth.UserSession).Get("/ws", chatroom.OpenWsConnection)
-	router.With(auth.UserSession).Get("/ws", chatroom.OpenWsConnection)
-	// add validation middleware
-	// TODO turn create-room into /room/create and the other ones too
-	router.With(auth.UserSession).Post("/create-room", chatroom.Create)
-	// add validation middleware
-	router.With(auth.UserSession).Post("/join-room", chatroom.Join)
-	// add validation middleware
-	router.With(auth.UserSession).Post("/create-invite", chatroom.CreateInvite)
-	// router.With(auth.UserSession).Post("/users/chatrooms", chatroom.GetUserChatrooms)
-	// router.With(auth.UserSession).Post("/users/chatrooms", chatroom.GetUserChatrooms)
-	router.Route("/user", func(router chi.Router) {
-		router.With(auth.UserSession).Post("/chatrooms", chatroom.GetUserInfo)
-		router.With(auth.UserSession).Post("/current-room", chatroom.GetCurrentRoomMessages)
-		// router.With(auth.UserSession).Post("/", user.GetUser)
+	router.Route("/api", func(router chi.Router) {
+		router.With(auth.UserSession).Get("/chat", chat)
+		router.With(auth.UserSession).Get("/ws", chatroom.OpenWsConnection)
+		router.Route("/room", func(router chi.Router) {
+			router.With(auth.UserSession).Post("/create", chatroom.Create)
+			router.With(auth.UserSession).Post("/join", chatroom.Join)
+			router.With(auth.UserSession).Post("/invite", chatroom.CreateInvite)
+			router.With(auth.UserSession).Post("/messages", chatroom.GetRoomMessages)
+			// router.With(auth.UserSession).Post("/delete", chatroom.GetCurrentRoomMessages)
+		})
+		router.Route("/user", func(router chi.Router) {
+			router.With(auth.UserSession).Post("/chatrooms", chatroom.GetUserInfo)
+			router.Post("/signup", auth.Signup)
+			router.Post("/login", auth.Login)
+			router.With(auth.UserSession).Post("/logout", auth.Logout)
+			// router.With(auth.UserSession).Post("/", user.GetUser)
+		})
 	})
 
 	// router.ServeHTTP()

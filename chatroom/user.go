@@ -97,7 +97,7 @@ func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 	writer.Write(rowsJson)
 }
 
-func GetCurrentRoomMessages(w http.ResponseWriter, req *http.Request) {
+func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
 		log.Println("error getting session name: ", err)

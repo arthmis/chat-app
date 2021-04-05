@@ -6,7 +6,7 @@ class JoinRoomForm extends React.Component {
     render() {
         return (
             <div id="join-chatroom-form-wrapper" onClick={this.props.closeModal}>
-                <form id="join-chatroom-form" action="/join-room" method="POST">
+                <form id="join-chatroom-form" action="/api/room/join" method="POST">
                     <p>Join a new community</p>
                     <div className="input-group">
                         <label for="join-chatroom-name">Invite Code</label>
@@ -24,7 +24,7 @@ class NewRoomForm extends React.Component {
         return (
             // <div id="new-chatroom-form-wrapper" className="visibility" >
             <div id="new-chatroom-form-wrapper" onClick={this.props.closeModal}>
-                <form id="new-chatroom-form" onSubmit={this.props.submit} action="/create-room" method="POST">
+                <form id="new-chatroom-form" onSubmit={this.props.submit} action="/api/room/create" method="POST">
                     <p>Create your new chatroom</p>
                     <div className="input-group">
                         <label for="new-chatroom-name">Chatroom Name</label>
@@ -137,7 +137,7 @@ class Messages extends React.Component {
 class Main extends React.Component {
     constructor(props) {
         super(props);
-        let webSocket = new WebSocket("ws://localhost:8000/ws");
+        let webSocket = new WebSocket("ws://localhost:8000/api/ws");
 
         webSocket.onerror = (ev) => {
             console.log(ev);
@@ -160,7 +160,7 @@ class Main extends React.Component {
         let form = document.getElementById("new-chatroom-form");
         const formData = new FormData(form);
 
-        let jsonPayload = await fetch("/create-room", {
+        let jsonPayload = await fetch("/api/room/create", {
             method: "POST",
             mode: "same-origin",
             body: formData,
@@ -197,7 +197,10 @@ class Main extends React.Component {
 
     async componentDidMount() {
         // retrieves users chatrooms and their current chatroom
-        const response = await fetch("/user/chatrooms", {
+        // TODO this has to handle the new data returned from this end point
+        // this only gives the current user's chatrooms messages
+        // and all the names of the chatrooms their user belongs to
+        const response = await fetch("/api/user/chatrooms", {
             method: 'POST',
             mode: 'same-origin',
         })
@@ -240,7 +243,7 @@ class App extends React.Component {
                 <header>
                     <nav>
                         <a id="landing-page" href="/">Chat App</a>
-                        <form id="logout" action="/logout" method="POST">
+                        <form id="logout" action="/api/logout" method="POST">
                             <input type="submit" value="Logout" form="logout" />
                         </form>
                     </nav>

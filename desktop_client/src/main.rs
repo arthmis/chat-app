@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     //     map.insert("password", "secretpassy");
     //     map.insert("confirmPassword", "secretpassy");
     //     let res = client
-    //         .post("http://localhost:8000/signup")
+    //         .post("http://localhost:8000/api/user/signup")
     //         .form(&map)
     //         .send()
     //         .await;
@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         map.insert("email", "kupa@gmail.com");
         map.insert("password", "secretpassy");
         let res = client
-            .post("http://localhost:8000/login")
+            .post("http://localhost:8000/api/user/login")
             .form(&map)
             .send()
             .await;
@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         // map.insert("email", "kupa@gmail.com");
         // map.insert("password", "secretpassy");
         let res = client
-            .post("http://localhost:8000/user/chatrooms")
+            .post("http://localhost:8000/api/user/chatrooms")
             // .form(&map)
             .send()
             .await
@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         map.insert("chatroom_name", &selected_room);
         // map.insert("password", "secretpassy");
         let res = client
-            .post("http://localhost:8000/user/current-room")
+            .post("http://localhost:8000/api/room/messages")
             .form(&map)
             .send()
             .await
@@ -107,7 +107,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let (client, res) = task::block_on(async {
         let req = http::request::Builder::new()
             .method(Method::GET)
-            .uri("ws://localhost:8000/ws")
+            .uri("ws://localhost:8000/api/ws")
             .header("Cookie", format!("{}={}", "session-name", stored_cookie))
             .body(())
             .unwrap();
@@ -480,7 +480,7 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
                         // map.insert("password", "secretpassy");
                         let client = &data.http_client;
                         client
-                            .post("http://localhost:8000/user/current-room")
+                            .post("http://localhost:8000/api/room/messages")
                             .form(&map)
                             .send()
                             .await
@@ -515,7 +515,7 @@ fn create_room() -> impl Widget<AppState> {
             map.insert("chatroom_name", data.room_name.clone());
             let form = Form::new().text("chatroom_name", data.room_name.clone());
             data.client
-                .post("http://localhost:8000/create-room")
+                .post("http://localhost:8000/api/room/create")
                 // .form(&map)
                 .multipart(form)
                 .send()
