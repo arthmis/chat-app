@@ -1,13 +1,14 @@
 package auth
 
 import (
+	// "chat/chatroom"
+	"chat/app"
 	"chat/chatroom"
 	"chat/database"
 	"chat/validate"
 	"context"
 	"database/sql"
 	"html/template"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/schema"
@@ -34,28 +35,28 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 	var form UserSignup
 	err := req.ParseForm()
 	if err != nil {
-		log.Println("Error parsing form: ", err)
+		app.Sugar.Error("Error parsing form: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	err = Decoder.Decode(&form, req.PostForm)
 	if err != nil {
-		log.Println("err decoding form in signup: ", err)
+		app.Sugar.Error("err decoding form in signup: ", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	err = validate.Validate.Struct(form)
 	if err != nil {
-		log.Println("err validating form in signup: ", err)
+		app.Sugar.Error("err validating form in signup: ", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(form.Password), bcrypt.MinCost)
 	if err != nil {
-		log.Println("err generating from password: ", err)
+		app.Sugar.Error("err generating from password: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -78,7 +79,7 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		err = Tmpl.ExecuteTemplate(w, "signup.html", userExists)
 		if err != nil {
-			log.Println("error executing template: ", err)
+			app.Sugar.Error("error executing template: ", err)
 		}
 
 		return
@@ -87,7 +88,7 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		err = Tmpl.ExecuteTemplate(w, "signup.html", userExists)
 		if err != nil {
-			log.Println("error executing template: ", err)
+			app.Sugar.Error("error executing template: ", err)
 		}
 
 		return
@@ -96,7 +97,7 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		err = Tmpl.ExecuteTemplate(w, "signup.html", userExists)
 		if err != nil {
-			log.Println("error executing template: ", err)
+			app.Sugar.Error("error executing template: ", err)
 		}
 
 		return
@@ -110,10 +111,10 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 			string(hash),
 		)
 		if err != nil {
-			log.Println("error inserting new user: ", err)
+			app.Sugar.Error("error inserting new user: ", err)
 		}
 	} else {
-		log.Println("error inserting values: \n", err)
+		app.Sugar.Error("error inserting values: \n", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -122,7 +123,7 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	err = Tmpl.ExecuteTemplate(w, "login.html", nil)
 	if err != nil {
-		log.Println("error executing template: ", err)
+		app.Sugar.Error("error executing template: ", err)
 	}
 }
 
@@ -130,14 +131,14 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	var form UserLogin
 	err := req.ParseForm()
 	if err != nil {
-		log.Println("err parsing form data: ", err)
+		app.Sugar.Error("err parsing form data: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	err = Decoder.Decode(&form, req.PostForm)
 	if err != nil {
-		log.Println("err decoding post form: ", err)
+		app.Sugar.Error("err decoding post form: ", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -162,11 +163,11 @@ func Login(w http.ResponseWriter, req *http.Request) {
 
 		err = Tmpl.ExecuteTemplate(w, "login.html", loginSuccess)
 		if err != nil {
-			log.Println("error executing template: ", err)
+			app.Sugar.Error("error executing template: ", err)
 		}
 		return
 	} else if err != nil {
-		log.Println("err getting password hash: ", err)
+		app.Sugar.Error("err getting password hash: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -177,7 +178,7 @@ func Login(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		err = Tmpl.ExecuteTemplate(w, "login.html", loginSuccess)
 		if err != nil {
-			log.Println("error executing template: ", err)
+			app.Sugar.Error("error executing template: ", err)
 		}
 		return
 	}
@@ -185,7 +186,7 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	session, err := database.PgStore.New(req, "session-name")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("error creating new unsaved session: ", err)
+		app.Sugar.Error("error creating new unsaved session: ", err)
 		return
 	}
 	session.Options = &sessions.Options{
@@ -204,7 +205,7 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	var username string
 	err = row.Scan(&username)
 	if err != nil {
-		log.Println("err scanning row: ", err)
+		app.Sugar.Error("err scanning row: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -213,7 +214,7 @@ func Login(w http.ResponseWriter, req *http.Request) {
 
 	err = session.Save(req, w)
 	if err != nil {
-		log.Println("error saving session to db: ", err)
+		app.Sugar.Error("error saving session to db: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -249,7 +250,7 @@ func checkUserExists(ctx context.Context, email string, username string) (emailE
 func Logout(w http.ResponseWriter, req *http.Request) {
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
-		log.Println("err getting session name: ", err)
+		app.Sugar.Error("err getting session name: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -257,7 +258,7 @@ func Logout(w http.ResponseWriter, req *http.Request) {
 	session.Options.MaxAge = -1
 	err = session.Save(req, w)
 	if err != nil {
-		log.Println("Error deleting session: ", err)
+		app.Sugar.Error("Error deleting session: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -270,16 +271,16 @@ func UserSession(next http.Handler) http.Handler {
 		session, err := database.PgStore.Get(req, "session-name")
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			log.Println("Could not get session: ", err)
+			app.Sugar.Error("Could not get session: ", err)
 			return
 		}
 
 		username := session.Values["username"].(string)
-		log.Println(username)
+		app.Sugar.Info(username)
 
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			log.Println("error getting session: ", err)
+			app.Sugar.Error("error getting session: ", err)
 			return
 		}
 		if session.IsNew {

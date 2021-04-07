@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"chat/app"
 	"chat/chatroom"
 	"chat/database"
 	"chat/validate"
@@ -35,7 +36,7 @@ var scyllaSession gocqlx.Session
 func init() {
 	err := godotenv.Load("../.env")
 	if err != nil {
-		log.Println("Error loading .env file: ", err)
+		app.Sugar.Error("Error loading .env file: ", err)
 	}
 
 	Tmpl, err = template.New("templates").ParseGlob("../templates/*.html")
@@ -162,13 +163,13 @@ func addUser() {
 	user := tempUser{email: "test@gmail.com", username: "art", password: "secretpassy"}
 	err := validate.Validate.Struct(user)
 	if err != nil {
-		log.Println("err validating user data: ", err)
+		app.Sugar.Error("err validating user data: ", err)
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(user.password), bcrypt.MinCost)
 	if err != nil {
-		log.Println("err generating from password: ", err)
+		app.Sugar.Error("err generating from password: ", err)
 		return
 	}
 	_, err = database.PgDB.Exec(
@@ -178,7 +179,7 @@ func addUser() {
 		string(hash),
 	)
 	if err != nil {
-		log.Println("error inserting new user: ", err)
+		app.Sugar.Error("error inserting new user: ", err)
 	}
 }
 
@@ -189,7 +190,7 @@ func TestSignup(t *testing.T) {
 				`DELETE FROM users;`,
 			)
 			if err != nil {
-				log.Println("error deleting all users: ", err)
+				app.Sugar.Error("error deleting all users: ", err)
 			}
 		})
 	}(t)
@@ -225,7 +226,7 @@ func TestLogin(t *testing.T) {
 				`DELETE FROM users;`,
 			)
 			if err != nil {
-				log.Println("error deleting all users: ", err)
+				app.Sugar.Error("error deleting all users: ", err)
 			}
 		})
 	}(t)
@@ -258,7 +259,7 @@ func TestLogout(t *testing.T) {
 				`DELETE FROM users;`,
 			)
 			if err != nil {
-				log.Println("error deleting all users: ", err)
+				app.Sugar.Error("error deleting all users: ", err)
 			}
 		})
 	}(t)
@@ -285,7 +286,7 @@ func TestLogout(t *testing.T) {
 	form.Set("email", "test@gmail.com")
 	form.Set("password", "secretpassy")
 	res, _ = client.PostForm("/login", form)
-	log.Println(res)
+	app.Sugar.Error(res)
 
 	// req, _ := http.NewRequest(http.MethodPost, "/logout", strings.NewReader(""))
 	// res, _ := client.Do(req)
@@ -309,7 +310,7 @@ func TestLogout(t *testing.T) {
 	// addUser()
 	// session, err := database.PgStore.Get(req, "session-name")
 	// if err != nil {
-	// 	log.Println("error creating new unsaved session: ", err)
+	// 	app.Sugar.Error("error creating new unsaved session: ", err)
 	// 	return
 	// }
 	// session.Options = &sessions.Options{

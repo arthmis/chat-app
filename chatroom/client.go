@@ -1,9 +1,9 @@
 package chatroom
 
 import (
+	"chat/app"
 	"chat/database"
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/davecgh/go-spew/spew"
@@ -17,7 +17,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 	upgrader := websocket.Upgrader{}
 	conn, err := upgrader.Upgrade(writer, req, nil)
 	if err != nil {
-		log.Println("upgrade error: ", err)
+		app.Sugar.Error("upgrade error: ", err)
 	}
 	println("connection ugraded")
 
@@ -25,12 +25,12 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
-		log.Println("err getting session name: ", err)
+		app.Sugar.Error("err getting session name: ", err)
 	}
 	clientName := session.Values["username"].(string)
 
 	if err != nil {
-		log.Println("could not parse Message struct")
+		app.Sugar.Error("could not parse Message struct")
 	}
 	// TODO: function that retrieves chatrooms user is part of and joins them
 	chatUser := User{
@@ -49,7 +49,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		// TODO: Figure out why i'm doing this
 		if err.Error() != "" {
-			log.Println("Error finding all chatrooms for user: ", err)
+			app.Sugar.Error("Error finding all chatrooms for user: ", err)
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -63,7 +63,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 		_, message, err := conn.ReadMessage()
 
 		if err != nil {
-			log.Println("connection closed: ", err)
+			app.Sugar.Error("connection closed: ", err)
 			break
 		}
 		// spew.Dump(messageType, message)
@@ -73,7 +73,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 
 		err = json.Unmarshal([]byte(message), &testMessage)
 		if err != nil {
-			log.Println("error json parsing user message: ", err)
+			app.Sugar.Error("error json parsing user message: ", err)
 			break
 		}
 
@@ -88,7 +88,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 		spew.Dump(ChatroomChannels)
 		ChatroomChannels[userMessage.ChatroomName] <- userMessage
 		// if err != nil {
-		// 	log.Println("could not parse Message struct: ", err)
+		// 	app.Sugar.Error("could not parse Message struct: ", err)
 		// 	break
 		// }
 	}

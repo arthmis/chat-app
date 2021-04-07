@@ -1,11 +1,11 @@
 package chatroom
 
 import (
+	"chat/app"
 	"chat/database"
 	"chat/validate"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math"
 	"net/http"
@@ -71,16 +71,16 @@ func (room *Chatroom) Run() {
 		// room.Messages = append(room.Messages, newMessage)
 		err := room.saveMessage(newMessage)
 		if err != nil {
-			log.Println("error saving message: ", err)
+			app.Sugar.Error("error saving message: ", err)
 		}
 		bytes, err := json.Marshal(newMessage)
 		if err != nil {
-			log.Println(err)
+			app.Sugar.Error(err)
 		}
 		for i := range room.Clients {
 			err = room.Clients[i].Conn.WriteMessage(websocket.TextMessage, bytes)
 			if err != nil {
-				log.Println("error writing message to user ws connection: ", err)
+				app.Sugar.Error("error writing message to user ws connection: ", err)
 			}
 		}
 	}
@@ -89,10 +89,10 @@ func (room *Chatroom) Run() {
 func (room *Chatroom) saveMessage(chatMessage UserMessage) error {
 	messageId, err := room.Snowflake.NextID()
 	if err != nil {
-		log.Println("Error generating sonyflake id: ", err)
+		app.Sugar.Error("Error generating sonyflake id: ", err)
 		return err
 	}
-	log.Println("user: ", chatMessage.User)
+	app.Sugar.Info("user: ", chatMessage.User)
 
 	message := Message{
 		ChatroomName: chatMessage.ChatroomName,
@@ -103,7 +103,7 @@ func (room *Chatroom) saveMessage(chatMessage UserMessage) error {
 	query := room.ScyllaSession.Query(chatroomTable.Insert()).BindStruct(message)
 	err = query.ExecRelease()
 	if err != nil {
-		log.Println("Error inserting message in database: ", err)
+		app.Sugar.Error("Error inserting message in database: ", err)
 		return err
 	}
 
@@ -123,21 +123,21 @@ func NewChatroom() *Chatroom {
 func Create(writer http.ResponseWriter, req *http.Request) {
 	err := req.ParseMultipartForm(1000)
 	if err != nil {
-		log.Println("error parsing form: ", err)
+		app.Sugar.Error("error parsing form: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
-		log.Println("error getting session name: ", err)
+		app.Sugar.Error("error getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	roomName := req.FormValue("chatroom_name")
 	err = validate.Validate.Var(roomName, "lt=30,gt=3,ascii")
 	if err != nil {
-		log.Println("chatroom name was not valid: ", err)
+		app.Sugar.Error("chatroom name was not valid: ", err)
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -161,7 +161,7 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 	query := room.ScyllaSession.Query(userTable.Insert()).BindStruct(newRoomForUser)
 	err = query.ExecRelease()
 	if err != nil {
-		log.Println("Error inserting new chatroom for user in user table: ", err)
+		app.Sugar.Error("Error inserting new chatroom for user in user table: ", err)
 		return
 		// return err
 	}
@@ -177,13 +177,13 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 
 	chatroomNameEncoded, err := json.Marshal(room.Id)
 	if err != nil {
-		log.Println(err)
+		app.Sugar.Error(err)
 	}
 
 	writer.WriteHeader(http.StatusAccepted)
 	_, err = writer.Write(chatroomNameEncoded)
 	if err != nil {
-		log.Println("error writing chatroom name in response: ", err)
+		app.Sugar.Error("error writing chatroom name in response: ", err)
 		return
 	}
 }
@@ -193,7 +193,7 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 func CreateInvite(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		log.Println("error parsing form for create invite: ", err)
+		app.Sugar.Error("error parsing form for create invite: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -213,7 +213,7 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, err := w.Write([]byte("Expiry value is not one of the possible choices"))
 		if err != nil {
-			log.Println(err)
+			app.Sugar.Error(err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -221,13 +221,13 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 
 	inviteCodeUUID, err := uuid.NewRandom()
 	if err != nil {
-		log.Println("error creating random uuid: ", err)
+		app.Sugar.Error("error creating random uuid: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	inviteCode := inviteCodeUUID.String()
 	inviteCode = strings.ReplaceAll(inviteCode, "-", "")
-	fmt.Println(inviteCode)
+	app.Sugar.Info(inviteCode)
 	if forever == math.Inf(1) {
 		_, err := database.PgDB.Exec(
 			`INSERT INTO Invites (invite, chatroom, expires) VALUES ($1, $2, $3)`,
@@ -236,7 +236,7 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 			"infinity",
 		)
 		if err != nil {
-			log.Println("error inserting invite into invites table: ", err)
+			app.Sugar.Error("error inserting invite into invites table: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -248,21 +248,21 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 			inviteTimeLimit,
 		)
 		if err != nil {
-			log.Println("error inserting invite into invites table: ", err)
+			app.Sugar.Error("error inserting invite into invites table: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
 	encodedInviteCode, err := json.Marshal(inviteCode)
 	if err != nil {
-		log.Println(err)
+		app.Sugar.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
 	_, err = w.Write(encodedInviteCode)
 	if err != nil {
-		log.Println("Error writing invite code in response: ", err)
+		app.Sugar.Error("Error writing invite code in response: ", err)
 	}
 
 }
@@ -271,7 +271,7 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 func Join(writer http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		log.Println("error parsing form: ", err)
+		app.Sugar.Error("error parsing form: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 	}
 
@@ -288,18 +288,18 @@ func Join(writer http.ResponseWriter, req *http.Request) {
 	var inviteExpiration string
 	err = row.Scan(&chatroomName, &inviteExpiration)
 	if err == sql.ErrNoRows {
-		log.Println("invite not found: ", err)
+		app.Sugar.Error("invite not found: ", err)
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	} else if err != nil {
-		log.Println("err scanning row: ", err)
+		app.Sugar.Error("err scanning row: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
-		log.Println("err getting session name: ", err)
+		app.Sugar.Error("err getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -313,13 +313,13 @@ func Join(writer http.ResponseWriter, req *http.Request) {
 	// writer.WriteHeader(http.StatusInternalServerError)
 	name, err := json.Marshal(chatroomName)
 	if err != nil {
-		log.Println(err)
+		app.Sugar.Error(err)
 	}
 
 	writer.WriteHeader(http.StatusAccepted)
 	_, err = writer.Write(name)
 	if err != nil {
-		log.Println("error writing chatroom name in response: ", err)
+		app.Sugar.Error("error writing chatroom name in response: ", err)
 		return
 	}
 }

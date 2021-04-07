@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -20,6 +19,7 @@ import (
 	"github.com/scylladb/gocqlx/v2"
 	"github.com/sony/sonyflake"
 
+	"chat/app"
 	"chat/auth"
 	"chat/chatroom"
 	"chat/database"
@@ -29,19 +29,21 @@ import (
 const addr = ":8000"
 
 func init() {
+	app.InitLogger()
+
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatalln("Error loading .env file: ", err)
+		app.Sugar.Fatalw("Error loading .env file: ", err)
 	}
 
 	auth.Tmpl, err = template.New("templates").ParseGlob("templates/*.html")
 	if err != nil {
-		log.Fatalln("Error instantiating templates: ", err)
+		app.Sugar.Fatalw("Error instantiating templates: ", err)
 	}
 
 	dbPort, err := strconv.ParseUint(os.Getenv("POSTGRES_PORT"), 10, 16)
 	if err != nil {
-		log.Fatalln("Failed to convert db port from environment variable to int: ", err)
+		app.Sugar.Fatalw("Failed to convert db port from environment variable to int: ", err)
 	}
 	database.PgDB = stdlib.OpenDB(pgx.ConnConfig{
 		Host:     os.Getenv("POSTGRES_HOST"),
@@ -51,16 +53,9 @@ func init() {
 		Password: os.Getenv("POSTGRES_PASSWORD"),
 	})
 
-	// spew.Dump(
-	// 	os.Getenv("POSTGRES_HOST"),
-	// 	uint16(dbPort),
-	// 	os.Getenv("POSTGRES_DB"),
-	// 	os.Getenv("POSTGRES_USER"),
-	// 	os.Getenv("POSTGRES_PASSWORD"),
-	// )
 	database.PgStore, err = pgstore.NewPGStoreFromPool(database.PgDB, []byte(os.Getenv("SESSION_SECRET")))
 	if err != nil {
-		log.Fatalln("Error creating session store using postgres:", err)
+		app.Sugar.Fatal("Error creating session store using postgres:", err)
 	}
 
 	_, err = database.PgDB.Exec(
@@ -73,7 +68,7 @@ func init() {
 	)
 
 	if err != nil {
-		log.Fatalln("Problem creating Users table: ", err)
+		app.Sugar.Fatalw("Problem creating Users table: ", err)
 	}
 
 	_, err = database.PgDB.Exec(
@@ -86,7 +81,7 @@ func init() {
 	)
 
 	if err != nil {
-		log.Fatalln("Problem creating Invites table: ", err)
+		app.Sugar.Fatalw("Problem creating Invites table: ", err)
 	}
 
 	_, err = database.PgDB.Exec(
@@ -97,10 +92,10 @@ func init() {
 	)
 
 	if err != nil {
-		log.Fatalln("Problem creating Rooms table: ", err)
+		app.Sugar.Fatalw("Problem creating Rooms table: ", err)
 	}
 
-	log.Println("Postgres database has been initialized.")
+	app.Sugar.Error("Postgres database has been initialized.")
 
 	go chatroom.RemoveExpiredInvites(database.PgDB, time.Minute*10)
 
@@ -109,7 +104,7 @@ func init() {
 	tempCluster.ProtoVersion = 4
 	cqlSession, err := tempCluster.CreateSession()
 	if err != nil {
-		log.Fatalln("Failed to create cluster session: ", err)
+		app.Sugar.Fatalw("Failed to create cluster session: ", err)
 	}
 
 	createKeyspace := cqlSession.Query(
@@ -123,7 +118,7 @@ func init() {
 		), nil)
 	err = createKeyspace.Exec()
 	if err != nil {
-		log.Fatalln("Failed to create keyspace: ", err)
+		app.Sugar.Fatalw("Failed to create keyspace: ", err)
 	}
 
 	// creating scylla cluster
@@ -131,7 +126,7 @@ func init() {
 	cluster.Keyspace = os.Getenv("KEYSPACE")
 	chatroom.ScyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
 	if err != nil {
-		log.Fatalln("Failed to wrap new cluster session: ", err)
+		app.Sugar.Fatalw("Failed to wrap new cluster session: ", err)
 	}
 
 	err = chatroom.ScyllaSession.ExecStmt(
@@ -144,7 +139,7 @@ func init() {
 		) WITH CLUSTERING ORDER BY (message_id DESC)`,
 	)
 	if err != nil {
-		log.Fatalln("Create messages store error:", err)
+		app.Sugar.Fatalw("Create messages store error:", err)
 	}
 	err = chatroom.ScyllaSession.ExecStmt(
 		`CREATE TABLE IF NOT EXISTS users(
@@ -155,9 +150,9 @@ func init() {
 		) WITH CLUSTERING ORDER BY (chatroom ASC)`,
 	)
 	if err != nil {
-		log.Fatalln("Create messages store error:", err)
+		app.Sugar.Fatalw("Create messages store error:", err)
 	}
-	log.Println("CassandraDB has been initialized.")
+	app.Sugar.Infow("CassandraDB has been initialized.")
 
 	// this will generate unique ids for each message on this
 	// particular server instance
@@ -171,7 +166,7 @@ func init() {
 		`SELECT name FROM Rooms`,
 	)
 	if err != nil {
-		log.Fatalln("couldn't get room rows", err)
+		app.Sugar.Fatalw("couldn't get room rows", err)
 	}
 
 	// initialize chatrooms
@@ -180,7 +175,7 @@ func init() {
 			var name string
 			err = rows.Scan(&name)
 			if err != nil {
-				log.Fatalln("couldn't scan row: ", err)
+				app.Sugar.Fatalw("couldn't scan row: ", err)
 			}
 
 			room := chatroom.NewChatroom()
@@ -200,12 +195,13 @@ func init() {
 			break
 		}
 	}
-	log.Println("Chatrooms initialized.")
+	app.Sugar.Infow("Chatrooms initialized.")
 }
 
 func main() {
 	defer database.PgDB.Close()
 
+	app.Sugar.Infow("Setting up router.")
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
 	// add validation middleware
@@ -240,8 +236,9 @@ func main() {
 	err := http.ListenAndServe(addr, router)
 
 	if err != nil {
-		log.Fatalln("error starting server: ", err)
+		app.Sugar.Fatal("error starting server: ", err)
 	}
+	app.Sugar.Info("Starting server.")
 }
 
 func FileServer(r chi.Router, path string, root http.FileSystem) {

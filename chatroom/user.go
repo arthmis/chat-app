@@ -1,9 +1,9 @@
 package chatroom
 
 import (
+	"chat/app"
 	"chat/database"
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/davecgh/go-spew/spew"
@@ -43,13 +43,13 @@ func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
-		log.Println("error getting session name: ", err)
+		app.Sugar.Error("error getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	username := session.Values["username"].(string)
-	log.Println(username)
+	app.Sugar.Info(username)
 	stmt := "SELECT chatroom FROM users WHERE user = ?;"
 	values := []string{"user"}
 	query := ScyllaSession.Query(stmt, values)
@@ -59,7 +59,7 @@ func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 	err = query.SelectRelease(&chatrooms)
 	if err != nil {
 		if err.Error() != "" {
-			log.Println("Error finding all chatrooms for user: ", err)
+			app.Sugar.Error("Error finding all chatrooms for user: ", err)
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -75,7 +75,7 @@ func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 	err = query.GetRelease(&currentRoom)
 	if err != nil {
 		if err.Error() != "not found" {
-			log.Println("Error getting current chatroom for user: ", err)
+			app.Sugar.Error("Error getting current chatroom for user: ", err)
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -90,7 +90,7 @@ func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 
 	rowsJson, err := json.Marshal(GetChatrooms{User: username, Chatrooms: chatrooms, CurrentRoom: currentRoom})
 	if err != nil {
-		log.Println("Error marshalling row data: ", err)
+		app.Sugar.Error("Error marshalling row data: ", err)
 	}
 
 	writer.WriteHeader(http.StatusOK)
@@ -100,14 +100,14 @@ func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
-		log.Println("error getting session name: ", err)
+		app.Sugar.Error("error getting session name: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	err = req.ParseForm()
 	if err != nil {
-		log.Println("err parsing form data: ", err)
+		app.Sugar.Error("err parsing form data: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -115,8 +115,8 @@ func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 	room_name := req.PostFormValue("chatroom_name")
 
 	username := session.Values["username"].(string)
-	log.Println(room_name)
-	log.Println(username)
+	app.Sugar.Info(room_name)
+	app.Sugar.Info(username)
 	stmt := "SELECT content FROM messages WHERE chatroom_name = ?;"
 	values := []string{"chatroom_name"}
 	query := ScyllaSession.Query(stmt, values)
@@ -127,7 +127,7 @@ func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 	err = query.SelectRelease(&room_messages)
 	if err != nil {
 		if err.Error() != "not found" {
-			log.Println("Error getting current chatroom for user: ", err)
+			app.Sugar.Error("Error getting current chatroom for user: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -136,7 +136,7 @@ func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 	spew.Dump(room_messages)
 	rowsJson, err := json.Marshal(room_messages)
 	if err != nil {
-		log.Println("Error marshalling row data: ", err)
+		app.Sugar.Error("Error marshalling row data: ", err)
 	}
 
 	w.WriteHeader(http.StatusOK)
