@@ -1,36 +1,38 @@
 package chatroom
 
 import (
-	"chat/app"
+	"chat/applog"
 	"chat/database"
 	"encoding/json"
 	"net/http"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/gorilla/websocket"
+	"nhooyr.io/websocket"
 )
 
 var Clients = make(map[string]*User)
 
 func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
-	println("making connection")
-	upgrader := websocket.Upgrader{}
-	conn, err := upgrader.Upgrade(writer, req, nil)
+	applog.Sugar.Info("making ws connection")
+	// write now this doesn't handle dealing with the request origin
+	conn, err := websocket.Accept(writer, req, nil)
 	if err != nil {
-		app.Sugar.Error("upgrade error: ", err)
+		applog.Sugar.Error("upgrade error: ", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	println("connection ugraded")
+	applog.Sugar.Info("connection ugraded to ws")
 
-	defer conn.Close()
+	defer conn.Close(websocket.StatusInternalError, "")
 
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
-		app.Sugar.Error("err getting session name: ", err)
+		applog.Sugar.Error("err getting session name: ", err)
 	}
 	clientName := session.Values["username"].(string)
 
 	if err != nil {
-		app.Sugar.Error("could not parse Message struct")
+		applog.Sugar.Error("could not parse Message struct")
 	}
 	// TODO: function that retrieves chatrooms user is part of and joins them
 	chatUser := User{
@@ -49,7 +51,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		// TODO: Figure out why i'm doing this
 		if err.Error() != "" {
-			app.Sugar.Error("Error finding all chatrooms for user: ", err)
+			applog.Sugar.Error("Error finding all chatrooms for user: ", err)
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -58,12 +60,13 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 		Chatrooms[name].addUser(conn, clientName)
 	}
 
+	ctx := req.Context()
 	for {
 		// messageType, message, err := conn.ReadMessage()
-		_, message, err := conn.ReadMessage()
+		_, message, err := conn.Read(ctx)
 
 		if err != nil {
-			app.Sugar.Error("connection closed: ", err)
+			applog.Sugar.Error("connection closed: ", err)
 			break
 		}
 		// spew.Dump(messageType, message)
@@ -73,7 +76,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 
 		err = json.Unmarshal([]byte(message), &testMessage)
 		if err != nil {
-			app.Sugar.Error("error json parsing user message: ", err)
+			applog.Sugar.Error("error json parsing user message: ", err)
 			break
 		}
 

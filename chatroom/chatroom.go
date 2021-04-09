@@ -1,9 +1,10 @@
 package chatroom
 
 import (
-	"chat/app"
+	"chat/applog"
 	"chat/database"
 	"chat/validate"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -13,10 +14,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 	"github.com/scylladb/gocqlx/v2"
 	"github.com/scylladb/gocqlx/v2/table"
 	"github.com/sony/sonyflake"
+	"nhooyr.io/websocket"
 )
 
 var messageMetaData = table.Metadata{
@@ -66,21 +67,23 @@ func (room *Chatroom) addUser(conn *websocket.Conn, user string) {
 	room.Clients = append(room.Clients, &client)
 }
 func (room *Chatroom) Run() {
+	ctx := context.Background()
 	for {
 		newMessage := <-room.Channel
 		// room.Messages = append(room.Messages, newMessage)
 		err := room.saveMessage(newMessage)
 		if err != nil {
-			app.Sugar.Error("error saving message: ", err)
+			applog.Sugar.Error("error saving message: ", err)
 		}
 		bytes, err := json.Marshal(newMessage)
 		if err != nil {
-			app.Sugar.Error(err)
+			applog.Sugar.Error(err)
 		}
 		for i := range room.Clients {
-			err = room.Clients[i].Conn.WriteMessage(websocket.TextMessage, bytes)
+			// err = room.Clients[i].Conn.WriteMessage(websocket.TextMessage, bytes)
+			err = room.Clients[i].Conn.Write(ctx, websocket.MessageText, bytes)
 			if err != nil {
-				app.Sugar.Error("error writing message to user ws connection: ", err)
+				applog.Sugar.Error("error writing message to user ws connection: ", err)
 			}
 		}
 	}
@@ -89,10 +92,10 @@ func (room *Chatroom) Run() {
 func (room *Chatroom) saveMessage(chatMessage UserMessage) error {
 	messageId, err := room.Snowflake.NextID()
 	if err != nil {
-		app.Sugar.Error("Error generating sonyflake id: ", err)
+		applog.Sugar.Error("Error generating sonyflake id: ", err)
 		return err
 	}
-	app.Sugar.Info("user: ", chatMessage.User)
+	applog.Sugar.Info("user: ", chatMessage.User)
 
 	message := Message{
 		ChatroomName: chatMessage.ChatroomName,
@@ -103,7 +106,7 @@ func (room *Chatroom) saveMessage(chatMessage UserMessage) error {
 	query := room.ScyllaSession.Query(chatroomTable.Insert()).BindStruct(message)
 	err = query.ExecRelease()
 	if err != nil {
-		app.Sugar.Error("Error inserting message in database: ", err)
+		applog.Sugar.Error("Error inserting message in database: ", err)
 		return err
 	}
 
@@ -123,21 +126,21 @@ func NewChatroom() *Chatroom {
 func Create(writer http.ResponseWriter, req *http.Request) {
 	err := req.ParseMultipartForm(1000)
 	if err != nil {
-		app.Sugar.Error("error parsing form: ", err)
+		applog.Sugar.Error("error parsing form: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
-		app.Sugar.Error("error getting session name: ", err)
+		applog.Sugar.Error("error getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	roomName := req.FormValue("chatroom_name")
 	err = validate.Validate.Var(roomName, "lt=30,gt=3,ascii")
 	if err != nil {
-		app.Sugar.Error("chatroom name was not valid: ", err)
+		applog.Sugar.Error("chatroom name was not valid: ", err)
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -161,7 +164,7 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 	query := room.ScyllaSession.Query(userTable.Insert()).BindStruct(newRoomForUser)
 	err = query.ExecRelease()
 	if err != nil {
-		app.Sugar.Error("Error inserting new chatroom for user in user table: ", err)
+		applog.Sugar.Error("Error inserting new chatroom for user in user table: ", err)
 		return
 		// return err
 	}
@@ -177,13 +180,13 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 
 	chatroomNameEncoded, err := json.Marshal(room.Id)
 	if err != nil {
-		app.Sugar.Error(err)
+		applog.Sugar.Error(err)
 	}
 
 	writer.WriteHeader(http.StatusAccepted)
 	_, err = writer.Write(chatroomNameEncoded)
 	if err != nil {
-		app.Sugar.Error("error writing chatroom name in response: ", err)
+		applog.Sugar.Error("error writing chatroom name in response: ", err)
 		return
 	}
 }
@@ -193,7 +196,7 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 func CreateInvite(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		app.Sugar.Error("error parsing form for create invite: ", err)
+		applog.Sugar.Error("error parsing form for create invite: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -213,7 +216,7 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, err := w.Write([]byte("Expiry value is not one of the possible choices"))
 		if err != nil {
-			app.Sugar.Error(err)
+			applog.Sugar.Error(err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -221,13 +224,13 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 
 	inviteCodeUUID, err := uuid.NewRandom()
 	if err != nil {
-		app.Sugar.Error("error creating random uuid: ", err)
+		applog.Sugar.Error("error creating random uuid: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	inviteCode := inviteCodeUUID.String()
 	inviteCode = strings.ReplaceAll(inviteCode, "-", "")
-	app.Sugar.Info(inviteCode)
+	applog.Sugar.Info(inviteCode)
 	if forever == math.Inf(1) {
 		_, err := database.PgDB.Exec(
 			`INSERT INTO Invites (invite, chatroom, expires) VALUES ($1, $2, $3)`,
@@ -236,7 +239,7 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 			"infinity",
 		)
 		if err != nil {
-			app.Sugar.Error("error inserting invite into invites table: ", err)
+			applog.Sugar.Error("error inserting invite into invites table: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -248,21 +251,21 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 			inviteTimeLimit,
 		)
 		if err != nil {
-			app.Sugar.Error("error inserting invite into invites table: ", err)
+			applog.Sugar.Error("error inserting invite into invites table: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
 	encodedInviteCode, err := json.Marshal(inviteCode)
 	if err != nil {
-		app.Sugar.Error(err)
+		applog.Sugar.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
 	_, err = w.Write(encodedInviteCode)
 	if err != nil {
-		app.Sugar.Error("Error writing invite code in response: ", err)
+		applog.Sugar.Error("Error writing invite code in response: ", err)
 	}
 
 }
@@ -271,7 +274,7 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 func Join(writer http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		app.Sugar.Error("error parsing form: ", err)
+		applog.Sugar.Error("error parsing form: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 	}
 
@@ -288,18 +291,18 @@ func Join(writer http.ResponseWriter, req *http.Request) {
 	var inviteExpiration string
 	err = row.Scan(&chatroomName, &inviteExpiration)
 	if err == sql.ErrNoRows {
-		app.Sugar.Error("invite not found: ", err)
+		applog.Sugar.Error("invite not found: ", err)
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	} else if err != nil {
-		app.Sugar.Error("err scanning row: ", err)
+		applog.Sugar.Error("err scanning row: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
-		app.Sugar.Error("err getting session name: ", err)
+		applog.Sugar.Error("err getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -313,13 +316,13 @@ func Join(writer http.ResponseWriter, req *http.Request) {
 	// writer.WriteHeader(http.StatusInternalServerError)
 	name, err := json.Marshal(chatroomName)
 	if err != nil {
-		app.Sugar.Error(err)
+		applog.Sugar.Error(err)
 	}
 
 	writer.WriteHeader(http.StatusAccepted)
 	_, err = writer.Write(name)
 	if err != nil {
-		app.Sugar.Error("error writing chatroom name in response: ", err)
+		applog.Sugar.Error("error writing chatroom name in response: ", err)
 		return
 	}
 }

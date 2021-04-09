@@ -84,14 +84,16 @@ class Rooms extends React.Component {
                     <input id="add-chatroom" type="submit" value="Add Chatroom" form="connect-chatroom" />
                 </form>  */}
                 <div id="chatrooms">
-                    {this.props.rooms.map((name) => {
+                    {this.props.rooms.map((name, idx) => {
+
                         if (name === this.props.currentRoom) {
-                            return (
-                                <div className="chatroom-name active-chatroom">{name}</div>
-                            );
+                            name = this.props.currentRoom
+                            // return (
+                            //     <div className="chatroom-name active-chatroom">{name}</div>
+                            // );
                         }
                         return (
-                            <div className="chatroom-name">{name}</div>
+                            <div key={idx} className="chatroom-name">{name}</div>
                         );
                     })}
                 </div>
@@ -137,7 +139,7 @@ class Messages extends React.Component {
 class Main extends React.Component {
     constructor(props) {
         super(props);
-        let webSocket = new WebSocket("ws://localhost:8000/api/ws");
+        let webSocket = new WebSocket("ws://localhost:4000/api/ws");
 
         webSocket.onerror = (ev) => {
             console.log(ev);
@@ -202,9 +204,13 @@ class Main extends React.Component {
         // and all the names of the chatrooms their user belongs to
         const response = await fetch("/api/user/chatrooms", {
             method: 'POST',
-            mode: 'same-origin',
+            // mode: 'same-origin',
+            // mode: "cors",
+            // credentials: 'include',
         })
+        console.log(response);
         const jsonData = await response.json();
+        console.log(jsonData);
         let chatrooms = jsonData["chatrooms"]
         let currentRoom = jsonData["current_room"]
         // chatrooms will be null if the user is not part of any chatrooms
@@ -243,7 +249,7 @@ class App extends React.Component {
                 <header>
                     <nav>
                         <a id="landing-page" href="/">Chat App</a>
-                        <form id="logout" action="/api/logout" method="POST">
+                        <form id="logout" action="/api/user/logout" method="POST">
                             <input type="submit" value="Logout" form="logout" />
                         </form>
                     </nav>

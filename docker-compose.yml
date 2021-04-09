@@ -1,11 +1,11 @@
 services:
-  # frontend:
-  #   container_name: chat-frontend
-  #   build: ./frontend
-  #   ports:
-  #     - "4000:4000"
-  #   depends_on:
-  #     - backend
+  frontend:
+    container_name: chat-frontend
+    build: ./frontend
+    ports:
+      - "4000:4000"
+    depends_on:
+      - backend
   postgres:
     container_name: chat_postgres
     image: postgres:10.12
@@ -26,33 +26,21 @@ services:
     volumes:
     # can't be white space between the colon and value after
       - pg_data:/var/lib/postgresql/data/
-  # backend:
-  #   container_name: app
-  #   build: .
-  #   ports:
-  #     - "8000:8000"
-  #   depends_on: 
-  #     - postgres
-  #     - scylla
+  backend:
+    container_name: app
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on: 
+      - postgres
+      - scylla
   #   # restart: on-failure
   scylla:
     container_name: scylla
     # image: scylladb/scylla
     image: cassandra:3.10
     ports:
-    #   - "7199:7199"
       - "9042:9042"
-    #   - "7000:7000"
-    #   - "7001:7001"
-    #   - "9160:9160"
-    #   - "10000:10000"
-    expose:
-      - "7199"
-      - "9042"
-      - "7000"
-      - "7001"
-      - "10000"
-      - "9160"
     volumes:
       - scylla_data:/var/lib/scylladb/data/
     mem_limit: 2g
