@@ -1,0 +1,83 @@
+openapi: "3.0.2"
+info:
+  title: Rume API
+  description: "Rest API used to access Rume."
+  version: "0.3"
+  contact:
+    name: "Art"
+    url: https://github.com/arthmis/chat-app
+    email: "arthmis20@gmail.com"
+servers:
+  - url: http://localhost:4000/api/
+
+paths:
+  /user/signup:
+    post:
+      # tags: user
+      summary: "Handles creation of new user."
+      description: "This will take a user email, password, and username and create a new user if that user doesn't already exist."
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - email
+                - username
+                - password
+                - confirmPassword
+              properties:
+                email:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+                confirmPassword:
+                  type: string
+      responses:
+        "201":
+          description: "User with request's username is created."
+          content:
+            text/html:
+              schema:
+                type: string
+        "200":
+          description: "User successfully made the request but the username, email, or both have been taken already."
+        "400":
+          description: "Occurs if there are validation errors or an error decoding the form."
+        "500":
+          description: "Error when server can't perform an action that shouldn't fail."
+  /user/login:
+    post:
+      # tags: user
+      summary: "Creates authenticated session for user."
+      description: "This will authenticate a user and give them a cookie based authentication token."
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "303":
+          description: "Client was successfully authenticated and should redirect to specified location."
+        "200":
+          description: "User successfully made the request but the email, password, or both cannot be found."
+          content:
+            text/html:
+              schema:
+                type: string
+        "400":
+          description: "Occurs if there are validation errors or an error decoding the form."
+        "500":
+          description: "Error when server can't perform an action that shouldn't fail."
