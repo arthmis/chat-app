@@ -1,6 +1,7 @@
-package main
+// package main
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -16,8 +17,15 @@ import (
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/stdlib"
 	"github.com/joho/godotenv"
+	"github.com/opentracing/opentracing-go"
 	"github.com/scylladb/gocqlx/v2"
 	"github.com/sony/sonyflake"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/stdout"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 
 	"chat/applog"
 	"chat/auth"
@@ -200,18 +208,42 @@ func init() {
 	applog.Sugar.Infow("Chatrooms initialized.")
 }
 
+var tp *sdktrace.TracerProvider
+
 func main() {
 	defer database.PgDB.Close()
 
+	exporter, err := stdout.NewExporter(stdout.WithPrettyPrint())
+	if err != nil {
+		applog.Sugar.Fatal("failed to nitialize stdout export pipeline: %v", err)
+	}
+
+	bsp := sdktrace.NewBatchSpanProcessor(exporter)
+	tp = sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()), sdktrace.WithSpanProcessor(bsp))
+
+	otel.SetTracerProvider(tp)
+	propagator := propagation.NewCompositeTextMapPropagator(propagation.Baggage{}, propagation.TraceContext{})
+	otel.SetTextMapPropagator(propagator)
+
+	tracer := tp.Tracer("chat-application")
+
+	ctx := context.Background()
+	defer func() { _ = tp.Shutdown(ctx) }()
+
+	var span trace.Span
+	ctx, span = tracer.Start(ctx, "operation")
+	defer span.End()
+	span.AddEvent("Nice operation!", trace.WithAttributes((attribute.Int("bogons", 100))))
 	applog.Sugar.Infow("Setting up router.")
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
+	// router.Use(httptracer.Tracer(tracer, nil))
 	// add validation middleware
 	// router.Get("/", func(w http.ResponseWriter, req *http.Request) {
 	// 	w.WriteHeader(200)
 	// })
 	router.Route("/api", func(router chi.Router) {
-		router.With(auth.UserSession).Get("/chat", chat)
+		router.With(doTracing).With(auth.UserSession).Get("/chat", chat)
 		router.With(auth.LogRequest).With(auth.UserSession).Get("/ws", chatroom.OpenWsConnection)
 		router.Route("/room", func(router chi.Router) {
 			router.With(auth.UserSession).Post("/create", chatroom.Create)
@@ -231,11 +263,11 @@ func main() {
 
 	// router.ServeHTTP()
 
-	// FileServer(router, "/", http.Dir("./frontend"))
+	FileServer(router, "/", http.Dir("./frontend"))
 	// fileServer := http.FileServer(http.Dir("./frontend"))
 	// http.Handle("/", fileServer)
 	// http.Handle("/", http.StripPrefix("/", fileServer))
-	err := http.ListenAndServe(addr, router)
+	err = http.ListenAndServe(addr, router)
 
 	if err != nil {
 		applog.Sugar.Fatal("error starting server: ", err)
@@ -264,4 +296,22 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 
 func chat(w http.ResponseWriter, req *http.Request) {
 	http.ServeFile(w, req, "./frontend/chat")
+}
+
+func doTracing(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		tracer := tp.Tracer("chat-application")
+
+		// ctx := context.Background()
+		ctx := req.Context()
+		// var span trace.Span
+		span, traceCtx := opentracing.StartSpanFromContextWithTracer(ctx, tracer, "operating", nil)
+		defer func() { _ = tp.Shutdown(ctx) }()
+
+		ctx, span = tracer.Start(ctx, "operation")
+		defer span.Finish()
+		span.("Nice operation!", trace.WithAttributes((attribute.Int("bogons", 100))))
+		next.ServeHTTP(w, req)
+	})
+
 }
