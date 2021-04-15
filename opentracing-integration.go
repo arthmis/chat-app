@@ -1,8 +1,8 @@
 package main
 
 import (
-	"chat/applog"
 	"context"
+	"log"
 	"net/http"
 	"os"
 
@@ -10,42 +10,20 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	// "github.com/honeycombio/opentelemetry-exporter-go/honeycomb"
+	// otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpgrpc"
-	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
-var tp *sdktrace.TracerProvider
-
-func main() {
-	ctx := context.Background()
-	// exporter, err := stdout.NewExporter(stdout.WithPrettyPrint())
-	// if err != nil {
-	// 	applog.Sugar.Fatal("failed to nitialize stdout export pipeline: %v", err)
-	// }
+func initTracer() func() {
 	apikey, _ := os.LookupEnv("HONEYCOMB_API_KEY")
 	dataset, _ := os.LookupEnv("HONEYCOMB_DATASET")
-	// hny, err := honeycomb.NewExporter(honeycomb.Config{APIKey: apikey}, honeycomb.TargetingDataset(dataset), honeycomb.WithServiceName("rume-test"))
-	// if err != nil {
-	// 	applog.Sugar.Fatal(err)
-	// }
 
-	// httpConfig := otlphttp.WithEndpoint("localhost:9001")
-	// metricsDriver := otlphttp.NewDriver()
-	// tracesDriver := otlphttp.NewDriver(httpConfig)
-	// // tracesDriver := otlphttp.NewDriver()
-	// config := otlp.SplitConfig{ForMetrics: metricsDriver, ForTraces: tracesDriver}
-	// driver := otlp.NewSplitDriver(config)
-	// exporter, err := otlp.NewExporter(ctx, driver)
-	// if err != nil {
-	// 	applog.Sugar.Fatal("failed to nitialize http export pipeline: %v", err)
-	// }
-
-	// bsp := sdktrace.NewBatchSpanProcessor(hny)
+	ctx := context.Background()
 	exporter, err := otlp.NewExporter(
 		ctx,
 		otlpgrpc.NewDriver(
@@ -58,57 +36,73 @@ func main() {
 		),
 	)
 	if err != nil {
-		applog.Sugar.Fatal("failed to initialize http export pipeline: %v", err)
+		// applog.Sugar.Fatal("failed to initialize http export pipeline: %v", err)
+		log.Fatalf("failed to initialize http export pipeline: %v", err)
 	}
+	// exporter, err := stdout.NewExporter(stdout.WithPrettyPrint())
+	// if err != nil {
+	// 	applog.Sugar.Fatal("failed to nitialize stdout export pipeline: %v", err)
+	// }
 
-	bsp := sdktrace.NewBatchSpanProcessor(exporter)
-	tp = sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()), sdktrace.WithSpanProcessor(bsp))
-	// provider := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()), trace.WithBatcher(exporter))
+	// bsp := sdktrace.NewBatchSpanProcessor(exporter)
+	// provider := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()), sdktrace.WithSpanProcessor(bsp))
+	// otel.SetTracerProvider(provider)
 
-	otel.SetTracerProvider(tp)
-	propagator := propagation.NewCompositeTextMapPropagator(propagation.Baggage{}, propagation.TraceContext{})
-	otel.SetTextMapPropagator(propagator)
+	provider := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithBatcher(exporter),
+	)
+	log.Printf("%v", provider)
+	otel.SetTracerProvider(provider)
 
-	// tracer := tp.Tracer("chat-application")
-
-	defer func() { _ = tp.Shutdown(ctx) }()
-	// defer hny.Shutdown(ctx)
-	// var span trace.Span
-	// ctx, span = tracer.Start(ctx, "operation")
-	// defer span.End()
+	return func() {
+		ctx := context.Background()
+		err := provider.Shutdown(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+func main() {
+	cleanup := initTracer()
+	defer cleanup()
 
 	router := chi.NewRouter()
-	router.With(doTracing).Get("/do-thing", doThing)
+	router.Use(doTracing)
+	// router.With(doTracing).Get("/do-thing", doThing)
+	router.Get("/do-thing", doThing)
 	// otlphttp.
 	// router.Get("/do-thing", doThing)
-	err = http.ListenAndServe(":8000", router)
+	// router.Get("/do-thing", otelhttp.NewHandler(doThing, "test"))
+	_ = http.ListenAndServe(":8000", router)
 }
 
 func doThing(w http.ResponseWriter, req *http.Request) {
-	applog.Sugar.Info("hello")
-	tracer := otel.Tracer("doThing")
-	var span trace.Span
-	_, span = tracer.Start(req.Context(), "doThing")
-	span.AddEvent("Hello, Finished doing thing!")
-	defer span.End()
-	applog.Sugar.Info("goodbye")
+	// applog.Sugar.Info("hello")
+	// span := trace.SpanFromContext(req.Context())
+	// tracer := otel.Tracer("doThing")
+	// var span trace.Span
+	// _, span = tracer.Start(req.Context(), "doThing")
+	// defer span.End()
+	// span.AddEvent("Hello, Finished doing thing!")
+	// span.SetAttributes(kv.Any("id", id), kv.Any("price", price))
+	// applog.Sugar.Info("goodbye")
 
 	w.WriteHeader(200)
 }
 
 func doTracing(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		tracer := otel.Tracer("doThing")
+		tracer := otel.Tracer("")
+		tracerprovider := otel.GetTracerProvider()
+		// spew.Dump(tracerprovider)
+		log.Printf("%v", tracerprovider)
 
-		// ctx := context.Background()
-		ctx := req.Context()
-		var span trace.Span
-		// span, traceCtx := opentracing.StartSpanFromContextWithTracer(ctx, tracer, "operating", nil)
-		defer func() { _ = tp.Shutdown(ctx) }()
-
-		ctx, span = tracer.Start(ctx, "operation")
+		ctx, span := tracer.Start(req.Context(), "doTracing")
 		defer span.End()
-		span.AddEvent("Nice operation!", trace.WithAttributes((attribute.Int("bogons", 100))))
+
+		span.AddEvent("Doing Tracing!", trace.WithAttributes((attribute.Int("bogons", 100))))
+
 		next.ServeHTTP(w, req.WithContext(ctx))
 		// ww := middleware.NewWrapResponseWriter(w, req.ProtoMajor)
 		// next.ServeHTTP(ww, req.WithContext(ctx))

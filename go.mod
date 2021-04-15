@@ -24,6 +24,7 @@ require (
 	github.com/scylladb/gocqlx/v2 v2.1.0
 	github.com/shopspring/decimal v0.0.0-20200227202807-02e2044944cc // indirect
 	github.com/sony/sonyflake v1.0.0
+	go.opentelemetry.io/contrib/instrumentation/net/http v0.11.0 // indirect
 	go.opentelemetry.io/otel v0.19.0
 	go.opentelemetry.io/otel/exporters/otlp v0.19.0 // indirect
 	go.opentelemetry.io/otel/exporters/stdout v0.19.0
