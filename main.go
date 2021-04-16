@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,6 +20,11 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/scylladb/gocqlx/v2"
 	"github.com/sony/sonyflake"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpgrpc"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"google.golang.org/grpc/credentials"
 
 	"chat/applog"
 	"chat/auth"
@@ -30,8 +37,6 @@ const addr = ":8000"
 
 func init() {
 	applog.InitLogger()
-
-	// app.AppState = app.NewApp()
 
 	err := godotenv.Load()
 	if err != nil {
@@ -200,41 +205,44 @@ func init() {
 	applog.Sugar.Infow("Chatrooms initialized.")
 }
 
+var tp *sdktrace.TracerProvider
+
 func main() {
+	tracerCleanup := initTracer()
+	defer tracerCleanup()
+
 	defer database.PgDB.Close()
 
 	applog.Sugar.Infow("Setting up router.")
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
-	// add validation middleware
-	// router.Get("/", func(w http.ResponseWriter, req *http.Request) {
-	// 	w.WriteHeader(200)
-	// })
+	router.Use(addTracing)
 	router.Route("/api", func(router chi.Router) {
 		router.With(auth.UserSession).Get("/chat", chat)
 		router.With(auth.LogRequest).With(auth.UserSession).Get("/ws", chatroom.OpenWsConnection)
 		router.Route("/room", func(router chi.Router) {
+			// add validation middleware for create
 			router.With(auth.UserSession).Post("/create", chatroom.Create)
+			// add validation middleware for join
 			router.With(auth.UserSession).Post("/join", chatroom.Join)
+			// add validation middleware for invite
 			router.With(auth.UserSession).Post("/invite", chatroom.CreateInvite)
+			// add validation middleware for messages
 			router.With(auth.UserSession).Post("/messages", chatroom.GetRoomMessages)
 			// router.With(auth.UserSession).Post("/delete", chatroom.GetCurrentRoomMessages)
 		})
 		router.Route("/user", func(router chi.Router) {
 			router.With(auth.LogRequest).With(auth.UserSession).Post("/chatrooms", chatroom.GetUserInfo)
+			// add validation middleware for signup
 			router.Post("/signup", auth.Signup)
+			// add validation middleware for login
 			router.Post("/login", auth.Login)
 			router.With(auth.UserSession).Post("/logout", auth.Logout)
 			// router.With(auth.UserSession).Post("/", user.GetUser)
 		})
 	})
 
-	// router.ServeHTTP()
-
-	// FileServer(router, "/", http.Dir("./frontend"))
-	// fileServer := http.FileServer(http.Dir("./frontend"))
-	// http.Handle("/", fileServer)
-	// http.Handle("/", http.StripPrefix("/", fileServer))
+	FileServer(router, "/", http.Dir("./frontend"))
 	err := http.ListenAndServe(addr, router)
 
 	if err != nil {
@@ -264,4 +272,61 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 
 func chat(w http.ResponseWriter, req *http.Request) {
 	http.ServeFile(w, req, "./frontend/chat")
+}
+
+func addTracing(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		tracer := otel.Tracer("")
+
+		ctx, span := tracer.Start(req.Context(), "")
+		defer span.End()
+
+		next.ServeHTTP(w, req.WithContext(ctx))
+	})
+
+}
+
+func initTracer() func() {
+	var dataset string
+	apikey, found := os.LookupEnv("HONEYCOMB_API_KEY")
+	if !found {
+		applog.Sugar.Warn("HONEYCOMB_API_KEY env variable was not found.")
+		return func() {}
+	}
+	dataset, found = os.LookupEnv("HONEYCOMB_DATASET")
+	if !found {
+		applog.Sugar.Warn("HONEYCOMB_DATASET env variable was not found.")
+		return func() {}
+	}
+
+	ctx := context.Background()
+	exporter, err := otlp.NewExporter(
+		ctx,
+		otlpgrpc.NewDriver(
+			otlpgrpc.WithTLSCredentials(credentials.NewClientTLSFromCert(nil, "")),
+			otlpgrpc.WithEndpoint("api.honeycomb.io:443"),
+			otlpgrpc.WithHeaders(map[string]string{
+				"x-honeycomb-team":    apikey,
+				"x-honeycomb-dataset": dataset,
+			}),
+		),
+	)
+	if err != nil {
+		applog.Sugar.Warn("failed to initialize honeycomb export pipeline: ", err)
+		return func() {}
+	}
+
+	provider := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithBatcher(exporter),
+	)
+	otel.SetTracerProvider(provider)
+
+	return func() {
+		ctx := context.Background()
+		err := provider.Shutdown(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
