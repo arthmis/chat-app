@@ -3,6 +3,7 @@ package chatroom
 import (
 	"chat/applog"
 	"chat/database"
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -15,6 +16,11 @@ type UserMessage struct {
 	// MessageType  string
 	User         string
 	ChatroomName string
+}
+
+type MessageWithCtx struct {
+	Message UserMessage
+	Ctx     context.Context
 }
 
 type TestMessage struct {

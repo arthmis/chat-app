@@ -21,7 +21,7 @@ require (
 	github.com/joho/godotenv v1.3.0
 	github.com/lib/pq v1.8.0 // indirect
 	// github.com/opentracing/opentracing-go v1.2.0
-	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pkg/errors v0.9.1
 	github.com/scylladb/gocqlx/v2 v2.1.0
 	github.com/shopspring/decimal v0.0.0-20200227202807-02e2044944cc // indirect
 	github.com/sony/sonyflake v1.0.0

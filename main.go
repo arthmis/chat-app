@@ -192,7 +192,8 @@ func init() {
 			// room.Clients = make([]*chatroom.User, 0)
 			room.Clients = []*chatroom.ChatroomClient{}
 			room.Messages = make([]chatroom.UserMessage, 20)
-			room.Channel = make(chan chatroom.UserMessage)
+			// room.Channel = make(chan chatroom.UserMessage)
+			room.Channel = make(chan chatroom.MessageWithCtx)
 
 			chatroom.Chatrooms[room.Id] = room
 			chatroom.ChatroomChannels[room.Id] = room.Channel
@@ -216,7 +217,6 @@ func main() {
 	applog.Sugar.Infow("Setting up router.")
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
-	router.Use(addTracing)
 	router.Route("/api", func(router chi.Router) {
 		router.With(auth.UserSession).Get("/chat", chat)
 		router.With(auth.LogRequest).With(auth.UserSession).Get("/ws", chatroom.OpenWsConnection)

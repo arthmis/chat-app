@@ -3,16 +3,18 @@ package chatroom
 import (
 	"chat/applog"
 	"chat/database"
+	"context"
 	"encoding/json"
 	"net/http"
 
-	"github.com/davecgh/go-spew/spew"
+	"go.opentelemetry.io/otel"
 	"nhooyr.io/websocket"
 )
 
 var Clients = make(map[string]*User)
 
 func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
+	ctx, openWsSpan := otel.Tracer("").Start(req.Context(), "OpenWsConnection")
 	applog.Sugar.Info("making ws connection")
 	// write now this doesn't handle dealing with the request origin
 	conn, err := websocket.Accept(writer, req, nil)
@@ -21,17 +23,20 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	applog.Sugar.Info("connection ugraded to ws")
-
 	defer conn.Close(websocket.StatusInternalError, "")
+
+	openWsSpan.AddEvent("Connection upgraded to WebSocket")
+	applog.Sugar.Info("connection ugraded to ws")
 
 	session, err := database.PgStore.Get(req, "session-name")
 	if err != nil {
+		openWsSpan.RecordError(err)
 		applog.Sugar.Error("err getting session name: ", err)
 	}
 	clientName := session.Values["username"].(string)
 
 	if err != nil {
+		openWsSpan.RecordError(err)
 		applog.Sugar.Error("could not parse Message struct")
 	}
 	// TODO: function that retrieves chatrooms user is part of and joins them
@@ -51,6 +56,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		// TODO: Figure out why i'm doing this
 		if err.Error() != "" {
+			openWsSpan.RecordError(err)
 			applog.Sugar.Error("Error finding all chatrooms for user: ", err)
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
@@ -60,12 +66,19 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 		Chatrooms[name].addUser(conn, clientName)
 	}
 
-	ctx := req.Context()
+	openWsSpan.End()
+	tracer := otel.Tracer("")
 	for {
 		// messageType, message, err := conn.ReadMessage()
 		_, message, err := conn.Read(ctx)
+		// ctx, span := tracer.Start(ctx, clientName)
+		// maybe have unique ID for this user and their connection
+		// or maybe use the chatroom derived from the message
+		// as the name of the tracer
+		ctx, span := tracer.Start(context.Background(), clientName)
 
 		if err != nil {
+			span.RecordError(err)
 			applog.Sugar.Error("connection closed: ", err)
 			break
 		}
@@ -76,6 +89,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 
 		err = json.Unmarshal([]byte(message), &testMessage)
 		if err != nil {
+			span.RecordError(err)
 			applog.Sugar.Error("error json parsing user message: ", err)
 			break
 		}
@@ -88,12 +102,14 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 		// fmt.Println("message type: ", messageType)
 		// spew.Dump(userMessage)
 		// fmt.Println()
-		spew.Dump(ChatroomChannels)
-		ChatroomChannels[userMessage.ChatroomName] <- userMessage
+		// spew.Dump(ChatroomChannels)
+		// ChatroomChannels[userMessage.ChatroomName] <- userMessage
+		ChatroomChannels[userMessage.ChatroomName] <- MessageWithCtx{Message: userMessage, Ctx: ctx}
 		// if err != nil {
 		// 	app.Sugar.Error("could not parse Message struct: ", err)
 		// 	break
 		// }
+		span.End()
 	}
 	delete(Clients, clientName)
 }

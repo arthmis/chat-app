@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         map.insert("email", "kupa@gmail.com");
         map.insert("password", "secretpassy");
         let res = client
-            .post("http://localhost:4000/api/user/login")
+            .post("http://localhost:8000/api/user/login")
             .form(&map)
             .send()
             .await;
@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         // map.insert("email", "kupa@gmail.com");
         // map.insert("password", "secretpassy");
         let res = client
-            .post("http://localhost:4000/api/user/chatrooms")
+            .post("http://localhost:8000/api/user/chatrooms")
             // .form(&map)
             .send()
             .await
@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         map.insert("chatroom_name", &selected_room);
         // map.insert("password", "secretpassy");
         let res = client
-            .post("http://localhost:4000/api/room/messages")
+            .post("http://localhost:8000/api/room/messages")
             .form(&map)
             .send()
             .await
@@ -107,7 +107,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let (client, res) = task::block_on(async {
         let req = http::request::Builder::new()
             .method(Method::GET)
-            .uri("ws://localhost:4000/api/ws")
+            .uri("ws://localhost:8000/api/ws")
             .header("Cookie", format!("{}={}", "session-name", stored_cookie))
             .body(())
             .unwrap();

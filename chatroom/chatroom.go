@@ -4,7 +4,6 @@ import (
 	"chat/applog"
 	"chat/database"
 	"chat/validate"
-	"context"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -17,6 +16,7 @@ import (
 	"github.com/scylladb/gocqlx/v2"
 	"github.com/scylladb/gocqlx/v2/table"
 	"github.com/sony/sonyflake"
+	"go.opentelemetry.io/otel"
 	"nhooyr.io/websocket"
 )
 
@@ -51,14 +51,17 @@ type Chatroom struct {
 	Id      string
 	Clients []*ChatroomClient
 	// get rid of messages field, not necessary
-	Messages      []UserMessage
-	Channel       chan UserMessage
+	Messages []UserMessage
+	// Channel       chan UserMessage
+	Channel       chan MessageWithCtx
 	ScyllaSession *gocqlx.Session
 	Snowflake     *sonyflake.Sonyflake
 }
 
 var Chatrooms = make(map[string]*Chatroom)
-var ChatroomChannels = make(map[string]chan UserMessage)
+
+// var ChatroomChannels = make(map[string]chan UserMessage)
+var ChatroomChannels = make(map[string]chan MessageWithCtx)
 var Snowflake *sonyflake.Sonyflake
 var ScyllaSession gocqlx.Session
 
@@ -67,18 +70,29 @@ func (room *Chatroom) addUser(conn *websocket.Conn, user string) {
 	room.Clients = append(room.Clients, &client)
 }
 func (room *Chatroom) Run() {
-	ctx := context.Background()
+	// ctx := context.Background()
 	for {
 		newMessage := <-room.Channel
+		ctx := newMessage.Ctx
+		message := newMessage.Message
+		_, span := otel.Tracer("").Start(ctx, "Saving message")
 		// room.Messages = append(room.Messages, newMessage)
-		err := room.saveMessage(newMessage)
+		// err := room.saveMessage(newMessage)
+		err := room.saveMessage(message)
+		// if there is an error saving the message there should be
+		// a way to communicate back to the user that sent the message
+		// that it was not sent successfully and should try again
 		if err != nil {
 			applog.Sugar.Error("error saving message: ", err)
 		}
-		bytes, err := json.Marshal(newMessage)
+		// bytes, err := json.Marshal(newMessage)
+		bytes, err := json.Marshal(message)
 		if err != nil {
+			span.RecordError(err)
 			applog.Sugar.Error(err)
 		}
+		span.End()
+		ctx, span = otel.Tracer("").Start(ctx, "Writing message to users")
 		for i := range room.Clients {
 			// err = room.Clients[i].Conn.WriteMessage(websocket.TextMessage, bytes)
 			err = room.Clients[i].Conn.Write(ctx, websocket.MessageText, bytes)
@@ -86,6 +100,7 @@ func (room *Chatroom) Run() {
 				applog.Sugar.Error("error writing message to user ws connection: ", err)
 			}
 		}
+		span.End()
 	}
 }
 
@@ -118,7 +133,8 @@ func NewChatroom() *Chatroom {
 	room.Id = ""
 	room.Clients = make([]*ChatroomClient, 0)
 	room.Messages = make([]UserMessage, 20)
-	room.Channel = make(chan UserMessage)
+	// room.Channel = make(chan UserMessage)
+	room.Channel = make(chan MessageWithCtx)
 	return room
 }
 

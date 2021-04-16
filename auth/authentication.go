@@ -15,6 +15,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/schema"
 	"github.com/gorilla/sessions"
+	"go.opentelemetry.io/otel"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -34,36 +35,48 @@ type UserLogin struct {
 }
 
 func Signup(w http.ResponseWriter, req *http.Request) {
+	ctx, span := otel.Tracer("").Start(req.Context(), "Signup")
+	defer span.End()
+
 	var form UserSignup
 	err := req.ParseForm()
 	if err != nil {
 		applog.Sugar.Error("Error parsing form: ", err)
+		span.RecordError(err)
 		w.WriteHeader(http.StatusInternalServerError)
+		span.SetStatus(http.StatusInternalServerError, "Error parsing form")
 		return
 	}
 
 	err = Decoder.Decode(&form, req.PostForm)
 	if err != nil {
 		applog.Sugar.Error("err decoding form in signup: ", err)
+		span.RecordError(err)
 		w.WriteHeader(http.StatusBadRequest)
+		span.SetStatus(http.StatusBadRequest, "Error decoding form.")
 		return
 	}
 
 	err = validate.Validate.Struct(form)
 	if err != nil {
-		applog.Sugar.Error("err validating form in signup: ", err)
+		applog.Sugar.Info("err validating form in signup: ", err)
+		// span.RecordError(errors.Wrap(err, applog.Sugar.Error("Err validating form in signup")))
+		span.RecordError(err)
 		w.WriteHeader(http.StatusBadRequest)
+		span.SetStatus(http.StatusBadRequest, "Error validating form.")
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(form.Password), bcrypt.MinCost)
 	if err != nil {
 		applog.Sugar.Error("err generating from password: ", err)
+		span.RecordError(err)
 		w.WriteHeader(http.StatusInternalServerError)
+		span.SetStatus(http.StatusInternalServerError, "Error generating hash for password.")
 		return
 	}
 
-	emailExists, usernameExists := checkUserExists(req.Context(), form.Email, form.Username)
+	emailExists, usernameExists := checkUserExists(ctx, form.Email, form.Username)
 
 	userExists := struct {
 		Username       string
@@ -79,33 +92,42 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 
 	if usernameExists && emailExists {
 		w.WriteHeader(http.StatusOK)
+		span.SetStatus(http.StatusOK, "User already exists.")
 		err = Tmpl.ExecuteTemplate(w, "signup.html", userExists)
 		if err != nil {
+			span.RecordError(err)
 			applog.Sugar.Error("error executing template: ", err)
+			span.AddEvent("Error executing template.")
 		}
 
 		return
 	} else if usernameExists {
 		userExists.EmailExists = ""
 		w.WriteHeader(http.StatusOK)
+		span.SetStatus(http.StatusOK, "User already exists.")
 		err = Tmpl.ExecuteTemplate(w, "signup.html", userExists)
 		if err != nil {
 			applog.Sugar.Error("error executing template: ", err)
+			span.RecordError(err)
+			// span.AddEvent(applog.Sugar.Errorf("Error executing template: %+v", errors.Wrap(err, "Error executing template.")))
 		}
 
 		return
 	} else if emailExists {
 		userExists.UsernameExists = ""
 		w.WriteHeader(http.StatusOK)
+		span.SetStatus(http.StatusOK, "User already exists.")
 		err = Tmpl.ExecuteTemplate(w, "signup.html", userExists)
 		if err != nil {
 			applog.Sugar.Error("error executing template: ", err)
+			span.RecordError(err)
 		}
 
 		return
 	}
 
 	if err == nil {
+		_, dbSpan := otel.Tracer("").Start(ctx, "Adding User to DB.")
 		_, err = database.PgDB.Exec(
 			`INSERT INTO Users (email, username, password) VALUES ($1, $2, $3)`,
 			form.Email,
@@ -114,27 +136,37 @@ func Signup(w http.ResponseWriter, req *http.Request) {
 		)
 		if err != nil {
 			applog.Sugar.Error("error inserting new user: ", err)
+			dbSpan.RecordError(err)
 		}
+		dbSpan.End()
 	} else {
 		applog.Sugar.Error("error inserting values: \n", err)
+		span.RecordError(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	chatroom.Clients[form.Username] = &chatroom.User{}
 
 	w.WriteHeader(http.StatusCreated)
+	span.SetStatus(http.StatusCreated, "User was created.")
 	err = Tmpl.ExecuteTemplate(w, "login.html", nil)
 	if err != nil {
 		applog.Sugar.Error("error executing template: ", err)
+		span.RecordError(err)
 	}
 }
 
 func Login(w http.ResponseWriter, req *http.Request) {
+	_, span := otel.Tracer("").Start(req.Context(), "Login")
+	defer span.End()
+
+	// span.SetAttributes(kv.Route, "/api/user/login")
 	var form UserLogin
 	err := req.ParseForm()
 	if err != nil {
 		applog.Sugar.Error("err parsing form data: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
+		span.SetStatus(http.StatusInternalServerError, "Error parsing form data.")
 		return
 	}
 
@@ -142,6 +174,7 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		applog.Sugar.Error("err decoding post form: ", err)
 		w.WriteHeader(http.StatusBadRequest)
+		span.SetStatus(http.StatusBadRequest, "Error parsing form data.")
 		return
 	}
 
@@ -162,15 +195,18 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	err = row.Scan(&password)
 	if err == sql.ErrNoRows {
 		w.WriteHeader(http.StatusOK)
+		span.SetStatus(http.StatusOK, "")
 
 		err = Tmpl.ExecuteTemplate(w, "login.html", loginSuccess)
 		if err != nil {
 			applog.Sugar.Error("error executing template: ", err)
+			span.AddEvent("TemplateExecutionFailure")
 		}
 		return
 	} else if err != nil {
 		applog.Sugar.Error("err getting password hash: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
+		span.SetStatus(http.StatusInternalServerError, "Error getting password hash")
 		return
 	}
 
@@ -178,9 +214,11 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	// password did not match
 	if err != nil {
 		w.WriteHeader(http.StatusOK)
+		span.SetStatus(http.StatusOK, "")
 		err = Tmpl.ExecuteTemplate(w, "login.html", loginSuccess)
 		if err != nil {
 			applog.Sugar.Error("error executing template: ", err)
+			span.AddEvent("TemplateExecutionFailure")
 		}
 		return
 	}
@@ -188,6 +226,10 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	session, err := database.PgStore.New(req, "session-name")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		span.SetStatus(
+			http.StatusInternalServerError,
+			"Could not create new session name for user.",
+		)
 		applog.Sugar.Error("error creating new unsaved session: ", err)
 		return
 	}
@@ -209,7 +251,12 @@ func Login(w http.ResponseWriter, req *http.Request) {
 	err = row.Scan(&username)
 	if err != nil {
 		applog.Sugar.Error("err scanning row: ", err)
+		span.AddEvent("DbError")
 		w.WriteHeader(http.StatusInternalServerError)
+		span.SetStatus(
+			http.StatusInternalServerError,
+			"Could not scan DB row for username.",
+		)
 		return
 	}
 
@@ -217,15 +264,24 @@ func Login(w http.ResponseWriter, req *http.Request) {
 
 	err = session.Save(req, w)
 	if err != nil {
+		span.AddEvent("SessionError")
 		applog.Sugar.Error("error saving session to db: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
+		span.SetStatus(
+			http.StatusInternalServerError,
+			"Error saving session to DB.",
+		)
 		return
 	}
 
+	span.SetStatus(http.StatusSeeOther, "Successfully logged in")
 	http.Redirect(w, req, "/chat", http.StatusSeeOther)
 }
 
 func checkUserExists(ctx context.Context, email string, username string) (emailExists, usernameExists bool) {
+	ctx, span := otel.Tracer("").Start(ctx, "checkUserExists")
+	defer span.End()
+
 	row := database.PgDB.QueryRow(
 		`SELECT email FROM Users WHERE email=$1`,
 		email,
