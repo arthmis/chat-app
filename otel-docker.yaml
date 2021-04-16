@@ -2,7 +2,7 @@ services:
   # Collector
   otel-collector:
     image: "otel/opentelemetry-collector-dev:latest"
-    command: ["--config=/etc/otel-collector-config.yaml", ""]
+    # command: ["--config=/etc/otel-collector-config.yaml", ""]
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
@@ -11,5 +11,5 @@ services:
       - "8889:8889" # Prometheus exporter metrics
       - "13133:13133" # health_check extension
       - "4317" # OTLP gRPC receiver
-      - "9001:9001"
-      # - "55670:55679" # zpages extension
+      # - "9001:9001"
+      - "55670:55679" # zpages extension

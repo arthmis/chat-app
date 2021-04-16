@@ -5,27 +5,18 @@ receivers:
   #       endpoint: "0.0.0.0:9000"
   otlp:
     protocols:
-      # grpc: # on port 55680
+      grpc: # on port 55680
       http: # on port 55681
-        endpoint: "0.0.0.0:9001"
 
 processors:
   batch:
 
 exporters:
-  # otlp:
-  #   endpoint: "api.honeycomb.io:443"
-  #   headers:
-  #     "x-honeycomb-team": "${HONEYCOMB_API_KEY}"
-  #     "x-honeycomb-dataset": "opentelemetry-collector"
   otlp:
-    # endpoint: "api.honeycomb.io:443"
-    api_key: "${HONEYCOMB_API_KEY}"
-    api_url: "https://api.honeycomb.io/"
-    dataset: "opentelemetry-collector"
-    # headers:
-    # "x-honeycomb-team": "${HONEYCOMB_API_KEY}"
-    # "x-honeycomb-dataset": "opentelemetry-collector"
+    endpoint: "api.honeycomb.io:443"
+    headers:
+      "x-honeycomb-team": "${HONEYCOMB_API_KEY}"
+      "x-honeycomb-dataset": "${HONEYCOMB_DATASET}"
 
 extensions:
   health_check:
