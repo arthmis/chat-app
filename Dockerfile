@@ -1,14 +1,15 @@
-FROM golang:1.10 AS build
-WORKDIR /go/src
-COPY go ./go
-COPY main.go .
+FROM golang:1.14.3
 
-ENV CGO_ENABLED=0
-RUN go get -d -v ./...
+WORKDIR /app
 
-RUN go build -a -installsuffix cgo -o swagger .
+COPY . .
 
-FROM scratch AS runtime
-COPY --from=build /go/src/swagger ./
-EXPOSE 8080/tcp
-ENTRYPOINT ["./swagger"]
+WORKDIR /app
+
+RUN go install 
+RUN go build 
+
+# runs the main app
+ENTRYPOINT /app/chat
+
+# EXPOSE 8000]
