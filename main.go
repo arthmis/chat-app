@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -24,7 +23,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpgrpc"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc"
 
 	"chat/applog"
 	"chat/auth"
@@ -287,28 +286,13 @@ func addTracing(next http.Handler) http.Handler {
 }
 
 func initTracer() func() {
-	var dataset string
-	apikey, found := os.LookupEnv("HONEYCOMB_API_KEY")
-	if !found {
-		applog.Sugar.Warn("HONEYCOMB_API_KEY env variable was not found.")
-		return func() {}
-	}
-	dataset, found = os.LookupEnv("HONEYCOMB_DATASET")
-	if !found {
-		applog.Sugar.Warn("HONEYCOMB_DATASET env variable was not found.")
-		return func() {}
-	}
-
 	ctx := context.Background()
 	exporter, err := otlp.NewExporter(
 		ctx,
 		otlpgrpc.NewDriver(
-			otlpgrpc.WithTLSCredentials(credentials.NewClientTLSFromCert(nil, "")),
-			otlpgrpc.WithEndpoint("api.honeycomb.io:443"),
-			otlpgrpc.WithHeaders(map[string]string{
-				"x-honeycomb-team":    apikey,
-				"x-honeycomb-dataset": dataset,
-			}),
+			otlpgrpc.WithInsecure(),
+			otlpgrpc.WithEndpoint("localhost:4317"),
+			otlpgrpc.WithDialOption(grpc.WithBlock()),
 		),
 	)
 	if err != nil {
@@ -316,17 +300,20 @@ func initTracer() func() {
 		return func() {}
 	}
 
+	bsp := sdktrace.NewBatchSpanProcessor(exporter)
 	provider := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-		sdktrace.WithBatcher(exporter),
+		sdktrace.WithSpanProcessor(bsp),
+		// sdktrace.WithBatcher(exporter),
 	)
 	otel.SetTracerProvider(provider)
 
+	applog.Sugar.Info("Tracing initialized.")
 	return func() {
 		ctx := context.Background()
 		err := provider.Shutdown(ctx)
 		if err != nil {
-			log.Fatal(err)
+			applog.Sugar.Fatal(err)
 		}
 	}
 }

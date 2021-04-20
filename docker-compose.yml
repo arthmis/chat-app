@@ -53,6 +53,19 @@ services:
     # environment: 
     #   - CASSANDRA_LISTEN_ADDRESS: scylla
 
+    # otel-collector:
+    #   image: "otel/opentelemetry-collector-dev:latest"
+    #   volumes:
+    #     - ./otel-collector-config.yaml:/etc/otel/config.yaml
+    #   ports:
+    #     - "1888:1888" # pprof extension
+    #     - "8888:8888" # Prometheus metrics exposed by the collector
+    #     - "8889:8889" # Prometheus exporter metrics
+    #     - "13133:13133" # health_check extension
+    #     - "4317:4317" # OTLP gRPC receiver
+    #     - "55670:55679" # zpages extension
+    #     - "9411:9411"
+    #     - "55678-55680:55678-55680"
 volumes:
   pg_data:
   scylla_data:
