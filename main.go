@@ -236,7 +236,7 @@ func main() {
 			// router.With(auth.UserSession).Post("/delete", chatroom.GetCurrentRoomMessages)
 		})
 		router.Route("/user", func(router chi.Router) {
-			router.With(auth.LogRequest).With(auth.UserSession).Post("/chatrooms", chatroom.GetUserInfo)
+			router.With(auth.UserSession).Post("/chatrooms", chatroom.GetUserInfo)
 			// add validation middleware for signup
 			router.Post("/signup", auth.Signup)
 			// add validation middleware for login

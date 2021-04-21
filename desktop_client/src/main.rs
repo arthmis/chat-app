@@ -243,25 +243,8 @@ struct LoginState {
     login_success: Option<AppState>,
 }
 
-fn try_login(sink: ExtEventSink, login_info: LoginInfo) -> Result<AppState, anyhow::Error> {
-    let client = http_client().unwrap();
-    // signs up to chat app
-    // let (client, res) = async_std::task::block_on(async {
-    //     map.insert("email", "kupa@gmail.com");
-    //     map.insert("username", "art");
-    //     map.insert("password", "secretpassy");
-    //     map.insert("confirmPassword", "secretpassy");
-    //     let res = client
-    //         .post("http://localhost:8000/api/user/signup")
-    //         .form(&map)
-    //         .send()
-    //         .await;
-    //     (client, res)
-    // });
-    // dbg!(res?);
-
-    // login
-    let (client, res) = task::block_on(async {
+fn client_login(client: &mut Client, login_info: LoginInfo) -> Result<String, anyhow::Error> {
+    let res = task::block_on(async {
         let mut map = StdMap::new();
         map.insert("email", &login_info.email);
         map.insert("password", &login_info.password);
@@ -270,7 +253,7 @@ fn try_login(sink: ExtEventSink, login_info: LoginInfo) -> Result<AppState, anyh
             .form(&map)
             .send()
             .await;
-        (client, res)
+        res
     });
     let res = res?;
     if res.status() == 200 {
@@ -281,10 +264,15 @@ fn try_login(sink: ExtEventSink, login_info: LoginInfo) -> Result<AppState, anyh
     }
     let cookies = res.cookies().collect::<Vec<Cookie>>();
     let stored_cookie = cookies[0].value().to_string();
-    // dbg!(cookies);
+    Ok(stored_cookie)
+}
+// dbg!(cookies);
 
-    // get user's chatrooms and information
-    let (client, res) = task::block_on(async {
+// get user's chatrooms and information
+fn get_user_chatroom_info(
+    client: &mut Client,
+) -> Result<(String, Vec<Room>, usize, UserInfo), anyhow::Error> {
+    let res = task::block_on(async {
         // let mut map = StdMap::new();
         // map.insert("email", "kupa@gmail.com");
         // map.insert("password", "secretpassy");
@@ -296,7 +284,7 @@ fn try_login(sink: ExtEventSink, login_info: LoginInfo) -> Result<AppState, anyh
             .unwrap()
             .json::<UserInfo>()
             .await;
-        (client, res)
+        res
     });
     let res = res?;
     let user_info = res.clone();
@@ -310,11 +298,17 @@ fn try_login(sink: ExtEventSink, login_info: LoginInfo) -> Result<AppState, anyh
 
     let selected_room = res.current_room;
     let selected_room_idx = { rooms.iter().position(|room| room.name == selected_room) }.unwrap();
+    Ok((selected_room, rooms, selected_room_idx, user_info))
+}
 
-    // get user's current room messages
+// get user's current room messages
+fn user_current_room_messages(
+    client: &mut Client,
+    selected_room: &str,
+) -> Result<Vec<String>, anyhow::Error> {
     let (client, res) = task::block_on(async {
         let mut map = StdMap::new();
-        map.insert("chatroom_name", &selected_room);
+        map.insert("chatroom_name", selected_room);
         // map.insert("password", "secretpassy");
         let res = client
             .post("http://localhost:8000/api/room/messages")
@@ -328,9 +322,14 @@ fn try_login(sink: ExtEventSink, login_info: LoginInfo) -> Result<AppState, anyh
     });
     dbg!(&res);
     let messages = res.unwrap().into_iter().rev().collect::<Vec<String>>();
+    Ok(messages)
+}
 
-    // establish websocket connection
-    let (client, res) = task::block_on(async {
+// establish websocket connection
+fn establish_ws_conn(
+    stored_cookie: &str,
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, anyhow::Error> {
+    let res = task::block_on(async {
         let req = http::request::Builder::new()
             .method(Method::GET)
             .uri("ws://localhost:8000/api/ws")
@@ -338,25 +337,11 @@ fn try_login(sink: ExtEventSink, login_info: LoginInfo) -> Result<AppState, anyh
             .body(())
             .unwrap();
         let res = connect_async(req).await;
-        (client, res)
+        res
     });
     let (stream, res) = res.unwrap();
     dbg!(&res);
-
-    // let window = WindowDesc::new(login()).title("Rume");
-    let mut map = HashMap::new();
-    map.insert(selected_room, Arc::new(messages));
-    let app_state = AppState::new(
-        map,
-        Arc::new(rooms),
-        selected_room_idx,
-        client,
-        stream,
-        sink,
-        user_info,
-    );
-    Ok(app_state)
-    // res?;
+    Ok(stream)
 }
 // #[derive(Debug, Default)]
 // struct FormController {
@@ -403,21 +388,44 @@ impl Controller<LoginState, Container<LoginState>> for LoginController {
     ) {
         match event {
             Event::Command(selector) if selector.is(ATTEMPT_LOGIN) => {
-                let window = WindowDesc::new(ui()).title("Rume");
                 let login_info = LoginInfo {
                     email: data.email.clone(),
                     password: data.password.clone(),
                 };
-                // let new_state = client_login(ctx, login_info).unwrap();
-                match try_login(ctx.get_external_handle(), login_info) {
-                    Ok(app_state) => {
-                        data.login_success = Some(app_state);
-                        // let _ = mem::replace(data, new_state);
-                        ctx.window().close();
-                        ctx.new_window(window);
-                        ctx.set_handled();
-                        return;
-                    }
+                let mut client = http_client().unwrap();
+                match client_login(&mut client, login_info) {
+                    Ok(cookie) => match get_user_chatroom_info(&mut client) {
+                        Ok((selected_room, rooms, selected_room_idx, user_info)) => {
+                            match user_current_room_messages(&mut client, &selected_room) {
+                                Ok(messages) => match establish_ws_conn(&cookie) {
+                                    Ok(stream) => {
+                                        let mut map = HashMap::new();
+                                        map.insert(selected_room, Arc::new(messages));
+                                        let app_state = AppState::new(
+                                            map,
+                                            Arc::new(rooms),
+                                            selected_room_idx,
+                                            client,
+                                            stream,
+                                            ctx.get_external_handle(),
+                                            user_info,
+                                        );
+                                        data.login_success = Some(app_state);
+                                        ctx.window().close();
+                                        let window = WindowDesc::new(ui()).title("Rume");
+                                        ctx.new_window(window);
+                                        ctx.set_handled();
+                                        return;
+                                    }
+                                    Err(err) => println!("{}", err),
+                                },
+                                Err(err) => {
+                                    println!("{}", err)
+                                }
+                            }
+                        }
+                        Err(err) => println!("{}", err),
+                    },
                     Err(err) => println!("{}", err),
                 }
             }
