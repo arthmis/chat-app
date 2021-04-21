@@ -509,6 +509,7 @@ dependencies = [
 name = "desktop_client"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-std",
  "druid",
  "futures-util",
