@@ -12,9 +12,9 @@ use druid::{
     im::HashMap,
     widget::{
         Button, Container, Controller, Flex, Label, List, ListIter, MainAxisAlignment, Painter,
-        Scope, ScopeTransfer, SizedBox, Split, TextBox,
+        Scope, ScopeTransfer, Split, TextBox,
     },
-    AppLauncher, Code, Color, Command, Data, Event, EventCtx, ExtEventSink, KeyEvent, Lens, Point,
+    AppLauncher, Code, Color, Command, Data, Event, EventCtx, ExtEventSink, Lens, Point,
     RenderContext, Selector, SingleUse, Target, Widget, WidgetExt, WindowConfig, WindowDesc,
     WindowLevel, WindowSizePolicy,
 };
@@ -306,7 +306,7 @@ fn user_current_room_messages(
     client: &mut Client,
     selected_room: &str,
 ) -> Result<Vec<String>, anyhow::Error> {
-    let (client, res) = task::block_on(async {
+    let res = task::block_on(async {
         let mut map = StdMap::new();
         map.insert("chatroom_name", selected_room);
         // map.insert("password", "secretpassy");
@@ -318,11 +318,10 @@ fn user_current_room_messages(
             .unwrap()
             .json::<Vec<String>>()
             .await;
-        (client, res)
+        res
     });
     dbg!(&res);
-    let messages = res.unwrap().into_iter().rev().collect::<Vec<String>>();
-    Ok(messages)
+    Ok(res?.into_iter().rev().collect::<Vec<String>>())
 }
 
 // establish websocket connection
@@ -339,8 +338,8 @@ fn establish_ws_conn(
         let res = connect_async(req).await;
         res
     });
-    let (stream, res) = res.unwrap();
-    dbg!(&res);
+    let (stream, _res) = res?;
+    // dbg!(&res);
     Ok(stream)
 }
 // #[derive(Debug, Default)]
@@ -358,20 +357,11 @@ impl Controller<String, TextBox<String>> for FormController {
         data: &mut String,
         env: &druid::Env,
     ) {
-        match event {
-            Event::KeyDown(key) => {
-                // dbg!("key down");
-                // dbg!(key);
+        if let Event::KeyUp(key) = event {
+            if key.code == Code::Enter {
+                ctx.submit_command(Command::new(ATTEMPT_LOGIN, (), Target::Auto))
             }
-            Event::KeyUp(key) => {
-                // dbg!("key up");
-                // dbg!(key);
-                if key.code == Code::Enter {
-                    //&& key.state != self.prev_key.as_ref().unwrap().state {
-                    ctx.submit_command(Command::new(ATTEMPT_LOGIN, (), Target::Auto))
-                }
-            }
-            _ => (),
+            ctx.set_handled();
         }
         child.event(ctx, event, data, env)
     }
