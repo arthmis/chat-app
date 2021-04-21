@@ -22,6 +22,10 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpgrpc"
+	"go.opentelemetry.io/otel/internal/global"
+	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
+	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 
@@ -300,6 +304,17 @@ func initTracer() func() {
 		return func() {}
 	}
 
+	pusher := controller.New(
+		processor.New(
+			simple.NewWithExactDistribution(),
+			exporter,
+		),
+		controller.WithExporter(exporter),
+		controller.WithCollectPeriod(5*time.Second),
+	)
+
+	err = pusher.Start(ctx)
+
 	bsp := sdktrace.NewBatchSpanProcessor(exporter)
 	provider := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
@@ -307,11 +322,18 @@ func initTracer() func() {
 		// sdktrace.WithBatcher(exporter),
 	)
 	otel.SetTracerProvider(provider)
+	global.SetMeterProvider(pusher.MeterProvider())
+	// propagator := propagation.NewCompositeTextMapPropagator(propagation.Baggage{}, propagation.TraceContext{})
+	// otel.SetTextMapPropagator(propagator)
 
 	applog.Sugar.Info("Tracing initialized.")
 	return func() {
 		ctx := context.Background()
 		err := provider.Shutdown(ctx)
+		if err != nil {
+			applog.Sugar.Fatal(err)
+		}
+		err = pusher.Stop(ctx)
 		if err != nil {
 			applog.Sugar.Fatal(err)
 		}

@@ -37,6 +37,7 @@ type UserLogin struct {
 func Signup(w http.ResponseWriter, req *http.Request) {
 	ctx, span := otel.Tracer("").Start(req.Context(), "Signup")
 	defer span.End()
+	// meter := global.Meter("Signup")
 
 	var form UserSignup
 	err := req.ParseForm()
