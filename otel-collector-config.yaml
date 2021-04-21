@@ -1,8 +1,8 @@
 receivers:
-  jaeger:
-    protocols:
-      thrift_http:
-        endpoint:
+  # jaeger:
+  #   protocols:
+  #     thrift_http:
+  #       endpoint:
   #       # endpoint: "0.0.0.0:14268"
   otlp:
     protocols:
@@ -22,10 +22,10 @@ exporters:
     headers:
       "x-honeycomb-team": "${HONEYCOMB_API_KEY}"
       "x-honeycomb-dataset": "${HONEYCOMB_DATASET}"
-  jaeger:
-    es:
-      server-urls: http://localhost:9200
-      num-replicas: 2
+  # jaeger:
+  #   es:
+  #     server-urls: http://localhost:9200
+  #     num-replicas: 2
 
 extensions:
   health_check:
@@ -39,7 +39,8 @@ service:
       # receivers: [jaeger, otlp]
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlp, jaeger]
+      # exporters: [otlp, jaeger]
+      exporters: [otlp]
     # metrics:
     #   receivers: [otlp]
     #   processors: [batch]
