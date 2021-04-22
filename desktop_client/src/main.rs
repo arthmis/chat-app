@@ -19,10 +19,10 @@ use druid::{
     WindowLevel, WindowSizePolicy,
 };
 use futures_util::{SinkExt, StreamExt};
-use reqwest::{cookie::Cookie, multipart::Form, redirect::Policy, Client, ClientBuilder, Method};
+use reqwest::{multipart::Form, Client};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
-use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
 mod user;
 
@@ -524,6 +524,23 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
                 }
                 data.selected_room = Some(*new_selected);
             }
+            Event::Command(selector) if selector.is(CREATE_ROOM) => {
+                let new_room = selector.get_unchecked(CREATE_ROOM).take().unwrap();
+
+                data.chatrooms
+                    .insert(new_room.clone(), Arc::new(Vec::new()));
+
+                data.selected_room = Some(data.rooms.len());
+
+                let new_rooms = Arc::make_mut(&mut data.rooms);
+                new_rooms.push(Room {
+                    name: new_room,
+                    idx: new_rooms.len(),
+                });
+                data.rooms = Arc::new(new_rooms.to_owned());
+
+                ctx.request_paint();
+            }
             _ => (),
         }
         child.event(ctx, event, data, env)
@@ -559,7 +576,9 @@ fn create_room() -> impl Widget<AppState> {
         ctx.submit_command(Command::new(
             CREATE_ROOM,
             SingleUse::new(data.room_name.clone()),
-            Target::Auto,
+            // change this to specifically target main window
+            // so I will need to store parent window's id
+            Target::Global,
         ));
         ctx.window().close();
     });
