@@ -24,6 +24,10 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
+mod user;
+
+use crate::user::*;
+
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let window = WindowDesc::new(login())
         .title("Rume")
@@ -41,7 +45,7 @@ impl Default for AppState {
         let (tx, _) = std::sync::mpsc::channel();
         AppState {
             chatrooms: HashMap::new(),
-            selected_room: 0,
+            selected_room: None,
             rooms: Arc::new(Vec::new()),
             http_client: Arc::new(Client::new()),
             channel: tx,
@@ -50,30 +54,12 @@ impl Default for AppState {
         }
     }
 }
-#[derive(Deserialize, Default, Debug, Clone, Data, Lens)]
-struct UserInfo {
-    // #[serde(rename = "User")]
-    name: String,
-    // #[serde(rename = "Chatrooms")]
-    #[data(ignore)]
-    chatrooms: Option<Vec<String>>,
-    // #[serde(rename = "CurrentRoom")]
-    current_room: String,
-}
-
-fn http_client() -> reqwest::Result<Client> {
-    ClientBuilder::new()
-        .cookie_store(true)
-        .gzip(true)
-        .redirect(Policy::none())
-        .build()
-}
 
 #[derive(Data, Lens, Clone)]
 struct AppState {
     chatrooms: HashMap<String, Arc<Vec<String>>>,
     rooms: Arc<Vec<Room>>,
-    selected_room: usize,
+    selected_room: Option<usize>,
     http_client: Arc<Client>,
     #[data(ignore)]
     channel: Sender<ChatMessage>,
@@ -82,7 +68,7 @@ struct AppState {
 }
 
 #[derive(Data, Lens, Clone, Debug, Eq, PartialEq, Hash)]
-struct Room {
+pub struct Room {
     name: String,
     idx: usize,
 }
@@ -140,7 +126,7 @@ impl AppState {
         Self {
             chatrooms,
             rooms,
-            selected_room,
+            selected_room: Some(selected_room),
             http_client: Arc::new(http_client),
             channel: tx,
             textbox: String::new(),
@@ -163,7 +149,10 @@ struct ChatroomsLens;
 impl Lens<AppState, Arc<Vec<String>>> for ChatroomsLens {
     fn with<V, F: FnOnce(&Arc<Vec<String>>) -> V>(&self, data: &AppState, f: F) -> V {
         if !data.rooms.is_empty() {
-            match data.chatrooms.get(&data.rooms[data.selected_room].name) {
+            match data
+                .chatrooms
+                .get(&data.rooms[data.selected_room.unwrap()].name)
+            {
                 Some(room) => f(room),
                 None => f(&Arc::new(Vec::new())),
             }
@@ -174,7 +163,10 @@ impl Lens<AppState, Arc<Vec<String>>> for ChatroomsLens {
 
     fn with_mut<V, F: FnOnce(&mut Arc<Vec<String>>) -> V>(&self, data: &mut AppState, f: F) -> V {
         if !data.rooms.is_empty() {
-            match data.chatrooms.get_mut(&data.rooms[data.selected_room].name) {
+            match data
+                .chatrooms
+                .get_mut(&data.rooms[data.selected_room.unwrap()].name)
+            {
                 Some(room) => f(room),
                 None => f(&mut Arc::new(Vec::new())),
             }
@@ -230,12 +222,6 @@ fn login() -> impl Widget<AppState> {
     Scope::from_function(|_| LoginState::default(), LoginStateTransfer, login)
 }
 
-#[derive(Debug, Clone)]
-struct LoginInfo {
-    email: String,
-    password: String,
-}
-
 #[derive(Data, Default, Debug, Clone, Lens)]
 struct LoginState {
     email: String,
@@ -243,109 +229,6 @@ struct LoginState {
     login_success: Option<AppState>,
 }
 
-fn client_login(client: &mut Client, login_info: LoginInfo) -> Result<String, anyhow::Error> {
-    let res = task::block_on(async {
-        let mut map = StdMap::new();
-        map.insert("email", &login_info.email);
-        map.insert("password", &login_info.password);
-        let res = client
-            .post("http://localhost:8000/api/user/login")
-            .form(&map)
-            .send()
-            .await;
-        res
-    });
-    let res = res?;
-    if res.status() == 200 {
-        anyhow::bail!(
-            "Login was not successful. Status code was: {}",
-            res.status()
-        );
-    }
-    let cookies = res.cookies().collect::<Vec<Cookie>>();
-    let stored_cookie = cookies[0].value().to_string();
-    Ok(stored_cookie)
-}
-// dbg!(cookies);
-
-// get user's chatrooms and information
-fn get_user_chatroom_info(
-    client: &mut Client,
-) -> Result<(String, Vec<Room>, usize, UserInfo), anyhow::Error> {
-    let res = task::block_on(async {
-        // let mut map = StdMap::new();
-        // map.insert("email", "kupa@gmail.com");
-        // map.insert("password", "secretpassy");
-        let res = client
-            .post("http://localhost:8000/api/user/chatrooms")
-            // .form(&map)
-            .send()
-            .await
-            .unwrap()
-            .json::<UserInfo>()
-            .await;
-        res
-    });
-    let res = res?;
-    let user_info = res.clone();
-    dbg!(&res);
-    let rooms = res.chatrooms.unwrap_or_default();
-    let rooms = rooms
-        .into_iter()
-        .enumerate()
-        .map(|(idx, name)| Room { name, idx })
-        .collect::<Vec<Room>>();
-
-    let selected_room = res.current_room;
-    let selected_room_idx = { rooms.iter().position(|room| room.name == selected_room) }.unwrap();
-    Ok((selected_room, rooms, selected_room_idx, user_info))
-}
-
-// get user's current room messages
-fn user_current_room_messages(
-    client: &mut Client,
-    selected_room: &str,
-) -> Result<Vec<String>, anyhow::Error> {
-    let res = task::block_on(async {
-        let mut map = StdMap::new();
-        map.insert("chatroom_name", selected_room);
-        // map.insert("password", "secretpassy");
-        let res = client
-            .post("http://localhost:8000/api/room/messages")
-            .form(&map)
-            .send()
-            .await
-            .unwrap()
-            .json::<Vec<String>>()
-            .await;
-        res
-    });
-    dbg!(&res);
-    Ok(res?.into_iter().rev().collect::<Vec<String>>())
-}
-
-// establish websocket connection
-fn establish_ws_conn(
-    stored_cookie: &str,
-) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, anyhow::Error> {
-    let res = task::block_on(async {
-        let req = http::request::Builder::new()
-            .method(Method::GET)
-            .uri("ws://localhost:8000/api/ws")
-            .header("Cookie", format!("{}={}", "session-name", stored_cookie))
-            .body(())
-            .unwrap();
-        let res = connect_async(req).await;
-        res
-    });
-    let (stream, _res) = res?;
-    // dbg!(&res);
-    Ok(stream)
-}
-// #[derive(Debug, Default)]
-// struct FormController {
-//     prev_key: Option<KeyEvent>,
-// }
 struct FormController;
 
 impl Controller<String, TextBox<String>> for FormController {
@@ -384,7 +267,7 @@ impl Controller<LoginState, Container<LoginState>> for LoginController {
                 };
                 let mut client = http_client().unwrap();
                 match client_login(&mut client, login_info) {
-                    Ok(cookie) => match get_user_chatroom_info(&mut client) {
+                    Ok(cookie) => match get_user_chatrooms_info(&mut client) {
                         Ok((selected_room, rooms, selected_room_idx, user_info)) => {
                             match user_current_room_messages(&mut client, &selected_room) {
                                 Ok(messages) => match establish_ws_conn(&cookie) {
@@ -593,7 +476,7 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
                 let message = selector.get_unchecked(SEND_MESSAGE).take().unwrap();
                 let message = ChatMessage {
                     user: data.user.name.to_owned(),
-                    room: data.rooms[data.selected_room].name.clone(),
+                    room: data.rooms[data.selected_room.unwrap()].name.clone(),
                     message,
                 };
 
@@ -639,7 +522,7 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
                         .chatrooms
                         .insert(room_name.to_owned(), Arc::new(messages));
                 }
-                data.selected_room = *new_selected;
+                data.selected_room = Some(*new_selected);
             }
             _ => (),
         }
@@ -724,7 +607,7 @@ impl ScopeTransfer for InviteTransfer {
 impl ListIter<(Room, usize)> for AppState {
     fn for_each(&self, mut cb: impl FnMut(&(Room, usize), usize)) {
         for (i, item) in self.rooms.iter().enumerate() {
-            let d = (item.to_owned(), self.selected_room);
+            let d = (item.to_owned(), self.selected_room.unwrap());
             cb(&d, i);
         }
     }
@@ -735,13 +618,13 @@ impl ListIter<(Room, usize)> for AppState {
         let mut new_selected = self.selected_room;
 
         for (i, item) in self.rooms.iter().enumerate() {
-            let mut d = (item.to_owned(), self.selected_room);
+            let mut d = (item.to_owned(), self.selected_room.unwrap());
             cb(&mut d, i);
 
             // if !any_changed && !(*item, i, self.selected_room).same(&d) {
-            if !any_changed && !self.selected_room.same(&d.1) {
+            if !any_changed && !self.selected_room.unwrap().same(&d.1) {
                 any_changed = true;
-                new_selected = d.1;
+                new_selected = Some(d.1);
             }
             // dbg!(any_changed);
             new_data.push(d.0);

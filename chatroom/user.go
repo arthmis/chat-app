@@ -121,6 +121,16 @@ func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 	}
 
 	room_name := req.PostFormValue("chatroom_name")
+	if room_name == "" {
+		room_messages := []string{}
+		rowsJson, err := json.Marshal(room_messages)
+		if err != nil {
+			applog.Sugar.Error("Error marshalling row data: ", err)
+		}
+		w.Write(rowsJson)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 
 	username := session.Values["username"].(string)
 	applog.Sugar.Info(room_name)
