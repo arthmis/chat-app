@@ -10,11 +10,12 @@ use std::{
 use async_std::task;
 use druid::{
     im::HashMap,
+    theme::{self, TEXTBOX_INSETS},
     widget::{
-        Button, Container, Controller, Flex, Label, List, ListIter, MainAxisAlignment, Painter,
-        Scope, ScopeTransfer, Split, TextBox,
+        Container, Controller, CrossAxisAlignment, Flex, Label, List, ListIter, MainAxisAlignment,
+        Painter, Scope, ScopeTransfer, Split, TextBox,
     },
-    AppLauncher, Code, Color, Command, Data, Event, EventCtx, ExtEventSink, Lens, Point,
+    AppLauncher, Code, Color, Command, Data, Event, EventCtx, ExtEventSink, Insets, Lens, Point,
     RenderContext, Selector, SingleUse, Target, Widget, WidgetExt, WindowConfig, WindowDesc,
     WindowLevel, WindowSizePolicy,
 };
@@ -23,10 +24,16 @@ use reqwest::{multipart::Form, Client};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
+use widgets::button::{
+    CHAT_BUTTON_ACTIVE, CHAT_BUTTON_ACTIVE_BORDER, CHAT_BUTTON_BORDER, CHAT_BUTTON_COLOR,
+    CHAT_BUTTON_HOVER, CHAT_BUTTON_HOVER_BORDER,
+};
 
 mod user;
+mod widgets;
 
 use crate::user::*;
+use crate::widgets::button::Button;
 
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let window = WindowDesc::new(login())
@@ -35,7 +42,27 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let app = AppLauncher::with_window(window).log_to_console();
 
     let app_state = AppState::default();
-    app.launch(app_state)?;
+    app.configure_env(|env, _data| {
+        env.set(CHAT_BUTTON_ACTIVE, Color::from_hex_str("#b68d40").unwrap());
+        env.set(CHAT_BUTTON_HOVER, Color::from_hex_str("#f4ebd0").unwrap());
+        env.set(CHAT_BUTTON_COLOR, Color::from_hex_str("#d6ad60").unwrap());
+        env.set(CHAT_BUTTON_ACTIVE_BORDER, Color::WHITE);
+        env.set(CHAT_BUTTON_HOVER_BORDER, Color::WHITE);
+        env.set(CHAT_BUTTON_BORDER, Color::WHITE);
+
+        // for textbox styling
+        env.set(
+            theme::BACKGROUND_LIGHT,
+            Color::from_hex_str("#dddddd").unwrap(),
+        );
+        env.set(theme::BORDER_DARK, Color::from_hex_str("#dddddd").unwrap());
+        env.set(
+            theme::PRIMARY_LIGHT,
+            Color::from_hex_str("#122620").unwrap(),
+        );
+        env.set(TEXTBOX_INSETS, Insets::uniform(10.0))
+    })
+    .launch(app_state)?;
 
     Ok(())
 }
@@ -187,34 +214,55 @@ struct ChatMessage {
 }
 
 fn login() -> impl Widget<AppState> {
+    let textbox_color = Color::BLACK;
+    let textbox_font_size = 21.;
+
     let email_label: Label<LoginState> = Label::new("Email")
         .with_text_size(14.)
         .with_text_color(Color::BLACK);
     let email_textbox = TextBox::new()
+        .with_text_size(textbox_font_size)
+        .with_text_color(textbox_color.clone())
         .controller(FormController)
         .fix_width(200.)
         .lens(LoginState::email);
+    let email = Flex::column()
+        .with_child(email_label)
+        .with_spacer(5.)
+        .with_child(email_textbox)
+        .cross_axis_alignment(CrossAxisAlignment::Start);
 
     let password_label = Label::new("Password")
         .with_text_size(14.)
         .with_text_color(Color::BLACK);
     let password_textbox = TextBox::new()
+        .with_text_size(textbox_font_size)
+        .with_text_color(textbox_color)
         .controller(FormController)
         .fix_width(200.)
         .lens(LoginState::password);
+    let password = Flex::column()
+        .with_child(password_label)
+        .with_spacer(5.)
+        .with_child(password_textbox)
+        .cross_axis_alignment(CrossAxisAlignment::Start);
 
-    let button = Button::new("Submit").on_click(|ctx, _: &mut LoginState, _| {
-        ctx.submit_command(Command::new(ATTEMPT_LOGIN, (), Target::Auto))
-    });
+    let button = Button::new("Submit")
+        .on_click(|ctx, _: &mut LoginState, _| {
+            ctx.submit_command(Command::new(ATTEMPT_LOGIN, (), Target::Auto))
+        })
+        .fix_width(100.)
+        .height(30.);
 
     let layout = Flex::column()
-        .with_child(email_label)
-        .with_child(email_textbox)
-        .with_child(password_label)
-        .with_child(password_textbox)
+        .with_child(email)
+        .with_spacer(10.)
+        .with_child(password)
+        .with_spacer(10.)
         .with_child(button);
 
     let login = Container::new(layout)
+        .padding(20.)
         .background(Color::WHITE)
         .controller(LoginController)
         .fix_size(400., 200.);

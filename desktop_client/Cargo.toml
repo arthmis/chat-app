@@ -16,6 +16,7 @@ futures-util = "*"
 serde_json = "1"
 http = "0.2.3"
 anyhow = "1"
+tracing = "0.1.25"
 
 [dependencies.async-std]
 version = "1"
