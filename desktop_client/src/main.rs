@@ -15,8 +15,8 @@ use druid::{
         Container, Controller, CrossAxisAlignment, Flex, Label, List, ListIter, MainAxisAlignment,
         Painter, Scope, ScopeTransfer, Split, TextBox,
     },
-    AppLauncher, Code, Color, Command, Data, Event, EventCtx, ExtEventSink, Insets, Lens, Point,
-    RenderContext, Selector, SingleUse, Target, Widget, WidgetExt, WindowConfig, WindowDesc,
+    AppLauncher, Code, Color, Command, Data, Event, EventCtx, ExtEventSink, Insets, Key, Lens,
+    Point, RenderContext, Selector, SingleUse, Target, Widget, WidgetExt, WindowConfig, WindowDesc,
     WindowLevel, WindowSizePolicy,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -24,9 +24,12 @@ use reqwest::{multipart::Form, Client};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
-use widgets::button::{
-    CHAT_BUTTON_ACTIVE, CHAT_BUTTON_ACTIVE_BORDER, CHAT_BUTTON_BORDER, CHAT_BUTTON_COLOR,
-    CHAT_BUTTON_HOVER, CHAT_BUTTON_HOVER_BORDER,
+use widgets::{
+    button::{
+        CHAT_BUTTON_ACTIVE, CHAT_BUTTON_ACTIVE_BORDER, CHAT_BUTTON_BORDER, CHAT_BUTTON_COLOR,
+        CHAT_BUTTON_HOVER, CHAT_BUTTON_HOVER_BORDER,
+    },
+    scroll_widget::Scroll,
 };
 
 mod user;
@@ -60,12 +63,23 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             theme::PRIMARY_LIGHT,
             Color::from_hex_str("#122620").unwrap(),
         );
-        env.set(TEXTBOX_INSETS, Insets::uniform(10.0))
+        env.set(TEXTBOX_INSETS, Insets::uniform_xy(10.0, 5.0));
+
+        // list item
+        env.set(LIST_ITEM_HOVER, Color::from_hex_str("#eeeeee").unwrap());
+        env.set(LIST_ITEM_ACTIVE, Color::from_hex_str("#d2d2d2").unwrap());
+        env.set(LIST_ITEM_SELECTED, Color::from_hex_str("#c1c1c1").unwrap());
+        // env.set(LIST_ITEM_COLOR, Color::from_hex_str("#dadada").unwrap());
     })
     .launch(app_state)?;
 
     Ok(())
 }
+
+pub const LIST_ITEM_HOVER: Key<Color> = Key::new("chat-app.theme.list-item-hover");
+pub const LIST_ITEM_ACTIVE: Key<Color> = Key::new("chat-app.theme.list-item-active");
+pub const LIST_ITEM_SELECTED: Key<Color> = Key::new("chat-app.theme.list-item-selected");
+// pub const LIST_ITEM_COLOR: Key<Color> = Key::new("chat-app.theme.list-item-color");
 
 impl Default for AppState {
     fn default() -> Self {
@@ -358,25 +372,25 @@ impl Controller<LoginState, Container<LoginState>> for LoginController {
 // const UPDATE_AFTER_LOGIN: Selector<SingleUse<AppState>> = Selector::new("UPDATE_AFTER_LOGIN");
 const ATTEMPT_LOGIN: Selector<()> = Selector::new("ATTEMPT_LOGIN");
 fn ui() -> impl Widget<AppState> {
-    let rooms = List::new(|| {
+    let rooms = Scroll::new(List::new(|| {
         // Label::dynamic(|(room, selected_room), _env| room.name.to_string())
         Label::dynamic(|data: &(Room, usize), _env| data.0.name.to_string())
             .with_text_color(Color::BLACK)
             .center()
             .expand_width()
-            .padding(5.0)
-            .background(Painter::new(|ctx, data: &(Room, usize), _env| {
+            .padding(10.0)
+            .background(Painter::new(|ctx, data: &(Room, usize), env| {
                 let is_hot = ctx.is_hot();
                 let is_active = ctx.is_active();
                 let (room, selected) = data;
                 let is_selected = room.idx == *selected;
 
                 let background_color = if is_active {
-                    Color::GREEN
+                    env.get(LIST_ITEM_ACTIVE)
                 } else if is_hot {
-                    Color::BLUE
+                    env.get(LIST_ITEM_HOVER)
                 } else if is_selected {
-                    Color::GRAY
+                    env.get(LIST_ITEM_SELECTED)
                 } else {
                     Color::WHITE
                 };
@@ -393,10 +407,10 @@ fn ui() -> impl Widget<AppState> {
                     Target::Auto,
                 ));
             })
-    })
-    .scroll()
+    }))
     .vertical();
     // .lens(AppState::rooms);
+
     let invite = Button::new("Invite");
     let create = Button::new("Create").on_click(|ctx, data: &mut AppState, env| {
         // dbg!(&data);
@@ -447,7 +461,7 @@ fn ui() -> impl Widget<AppState> {
         .height(40.)
         .center();
 
-    let messages = List::new(|| {
+    let messages = Scroll::new(List::new(|| {
         // let user = Label::dynamic(|room_name: &ChatMessage, _env| room_name.to_string())
         //     .with_text_color(Color::BLACK)
         //     .padding(5.0);
@@ -460,13 +474,26 @@ fn ui() -> impl Widget<AppState> {
         Label::dynamic(|room_name: &String, _env| room_name.to_string())
             .with_text_color(Color::BLACK)
             .padding(5.0)
-    })
-    .lens(ChatroomsLens)
-    .scroll()
+    }))
     .vertical()
+    .lens(ChatroomsLens)
     .expand()
     .padding(5.0);
+    let room_menu = {
+        let room_name = Label::dynamic(|data: &AppState, _env| {
+            data.rooms[data.selected_room.unwrap()].name.clone()
+        })
+        .with_text_size(24.)
+        .with_text_color(Color::from_hex_str("#333333").unwrap())
+        .padding(12.);
+        Flex::row()
+            .with_child(room_name)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .align_left()
+            .expand_width()
+    };
     let right = Flex::column()
+        .with_child(room_menu)
         .with_flex_child(messages, 9.0)
         // .with_flex_child(message_box, 1.0);
         .with_child(message_box);
