@@ -1,3 +1,5 @@
+#![feature(backtrace)]
+
 use std::{
     collections::HashMap as StdMap,
     error::Error,
@@ -54,7 +56,9 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         email: "kupa@gmail.com".to_string(),
         password: "secretpassy".to_string(),
     };
+    #[cfg(feature = "loggedin")]
     let mut client = http_client().unwrap();
+    #[cfg(feature = "loggedin")]
     let app_state = match client_login(&mut client, login_info) {
         Ok(cookie) => match get_user_chatrooms_info(&mut client) {
             Ok((selected_room, rooms, selected_room_idx, user_info)) => {
@@ -187,8 +191,19 @@ impl AppState {
                 loop {
                     match rx.recv() {
                         Ok(message) => {
-                            let message = Message::Text(serde_json::to_string(&message).unwrap());
-                            write.send(message).await.unwrap();
+                            // let message = Message::Text(serde_json::to_string(&message).unwrap());
+                            match serde_json::to_string(&message) {
+                                Ok(text) => {
+                                    let message = Message::Text(text);
+                                    match write.send(message).await {
+                                        Ok(something) => {}
+                                        Err(err) => println!("{}", err),
+                                    }
+                                }
+                                Err(err) => {
+                                    println!("{:?}", err.backtrace())
+                                }
+                            }
                         }
                         Err(err) => println!("{}", err),
                     }
@@ -201,22 +216,43 @@ impl AppState {
             task::block_on(async {
                 loop {
                     if let Some(res) = read.next().await {
-                        let message = res.unwrap();
-                        let message: ChatMessage =
-                            serde_json::from_str(message.to_text().unwrap()).unwrap();
-                        dbg!(&message);
-                        event_sink
-                            .submit_command(RECEIVE_MESSAGE, SingleUse::new(message), Target::Auto)
-                            .unwrap();
+                        match res {
+                            Ok(message) => match message.to_text() {
+                                Ok(message) => {
+                                    // let message: ChatMessage =
+                                    //     serde_json::from_str(message).unwrap();
+                                    match serde_json::from_str(message) {
+                                        Ok(message) => {
+                                            dbg!(&message);
+                                            event_sink
+                                                .submit_command(
+                                                    RECEIVE_MESSAGE,
+                                                    SingleUse::new(message),
+                                                    Target::Auto,
+                                                )
+                                                .unwrap();
+                                        }
+                                        Err(err) => println!("{:?}", err.backtrace()),
+                                    }
+                                }
+                                Err(err) => println!("{}", err.backtrace().unwrap()),
+                            },
+                            Err(err) => println!("{}", err.backtrace().unwrap()),
+                        }
                     }
                 }
             });
         });
 
+        let selected_room = if rooms.is_empty() {
+            None
+        } else {
+            Some(selected_room)
+        };
         Self {
             chatrooms,
             rooms,
-            selected_room: Some(selected_room),
+            selected_room,
             http_client: Arc::new(http_client),
             channel: tx,
             textbox: String::new(),
@@ -274,8 +310,13 @@ struct ChatMessage {
     room: String,
     #[serde(rename = "Message")]
     message: String,
+    // timestamp: DateTime<Utc>,
 }
 
+// #[derive(Debug, Clone, Deserialize, Data, Lens)]
+// struct Message {
+
+// }
 fn login() -> impl Widget<AppState> {
     let textbox_color = Color::BLACK;
     let textbox_font_size = 21.;
@@ -550,7 +591,11 @@ fn ui() -> impl Widget<AppState> {
     .padding(5.0);
     let room_menu = {
         let room_name = Label::dynamic(|data: &AppState, _env| {
-            data.rooms[data.selected_room.unwrap()].name.clone()
+            if let Some(selected) = data.selected_room {
+                data.rooms[selected].name.clone()
+            } else {
+                "".to_string()
+            }
         })
         .with_text_size(24.)
         .with_text_color(Color::from_hex_str("#333333").unwrap())

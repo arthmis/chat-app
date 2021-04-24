@@ -177,12 +177,35 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 		CurrentChatroom: roomName,
 		Chatroom:        roomName,
 	}
+
+	// TODO: assume these ccan fail
 	query := room.ScyllaSession.Query(userTable.Insert()).BindStruct(newRoomForUser)
 	err = query.ExecRelease()
 	if err != nil {
 		applog.Sugar.Error("Error inserting new chatroom for user in user table: ", err)
+		writer.WriteHeader(http.StatusInternalServerError)
 		return
-		// return err
+	}
+
+	// TODO: assume these ccan fail and I will have to roll back the above scylla insert and
+	// PG insert
+	// query = room.ScyllaSession.Query(chatroomTable.Insert()).BindStruct(newRoomForUser)
+	// err = query.ExecRelease()
+	// if err != nil {
+	// 	applog.Sugar.Error("Error inserting new chatroom into messages table: ", err)
+	// 	writer.WriteHeader(http.StatusInternalServerError)
+	// 	return
+	// }
+
+	// TODO: assume these ccan fail and I will have to roll back the above scylla insert
+	_, err = database.PgDB.Exec(
+		`INSERT INTO Rooms (name) VALUES ($1)`,
+		roomName,
+	)
+	if err != nil {
+		applog.Sugar.Error("error inserting new chatroom into Rooms table: ", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	Clients[username].Chatrooms = append(Clients[username].Chatrooms, room.Id)
@@ -199,7 +222,7 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 		applog.Sugar.Error(err)
 	}
 
-	writer.WriteHeader(http.StatusAccepted)
+	writer.WriteHeader(http.StatusCreated)
 	_, err = writer.Write(chatroomNameEncoded)
 	if err != nil {
 		applog.Sugar.Error("error writing chatroom name in response: ", err)
