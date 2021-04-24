@@ -10,7 +10,7 @@ use std::{
 use async_std::task;
 use druid::{
     im::HashMap,
-    theme::{self, TEXTBOX_INSETS},
+    theme::{self, SCROLLBAR_BORDER_COLOR, SCROLLBAR_COLOR, TEXTBOX_INSETS},
     widget::{
         Container, Controller, CrossAxisAlignment, Flex, Label, List, ListIter, MainAxisAlignment,
         Painter, Scope, ScopeTransfer, Split, TextBox,
@@ -39,12 +39,55 @@ use crate::user::*;
 use crate::widgets::button::Button;
 
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    #[cfg(feature = "loggedin")]
+    let window = WindowDesc::new(ui()).title("Rume");
+
+    #[cfg(not(feature = "loggedin"))]
     let window = WindowDesc::new(login())
         .title("Rume")
         .window_size_policy(WindowSizePolicy::Content);
+
     let app = AppLauncher::with_window(window).log_to_console();
 
+    #[cfg(feature = "loggedin")]
+    let login_info = LoginInfo {
+        email: "kupa@gmail.com".to_string(),
+        password: "secretpassy".to_string(),
+    };
+    let mut client = http_client().unwrap();
+    let app_state = match client_login(&mut client, login_info) {
+        Ok(cookie) => match get_user_chatrooms_info(&mut client) {
+            Ok((selected_room, rooms, selected_room_idx, user_info)) => {
+                match user_current_room_messages(&mut client, &selected_room) {
+                    Ok(messages) => match establish_ws_conn(&cookie) {
+                        Ok(stream) => {
+                            let mut map = HashMap::new();
+                            map.insert(selected_room, Arc::new(messages));
+                            AppState::new(
+                                map,
+                                Arc::new(rooms),
+                                selected_room_idx,
+                                client,
+                                stream,
+                                app.get_external_handle(),
+                                user_info,
+                            )
+                        }
+                        Err(err) => panic!("{}", err),
+                    },
+                    Err(err) => {
+                        panic!("{}", err)
+                    }
+                }
+            }
+            Err(err) => panic!("{}", err),
+        },
+        Err(err) => panic!("{}", err),
+    };
+
+    #[cfg(not(feature = "loggedin"))]
     let app_state = AppState::default();
+
     app.configure_env(|env, _data| {
         env.set(CHAT_BUTTON_ACTIVE, Color::from_hex_str("#b68d40").unwrap());
         env.set(CHAT_BUTTON_HOVER, Color::from_hex_str("#f4ebd0").unwrap());
@@ -52,6 +95,9 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         env.set(CHAT_BUTTON_ACTIVE_BORDER, Color::WHITE);
         env.set(CHAT_BUTTON_HOVER_BORDER, Color::WHITE);
         env.set(CHAT_BUTTON_BORDER, Color::WHITE);
+
+        // textbox cursor color
+        env.set(theme::CURSOR_COLOR, Color::BLACK);
 
         // for textbox styling
         env.set(
@@ -66,13 +112,16 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         env.set(TEXTBOX_INSETS, Insets::uniform_xy(10.0, 5.0));
 
         // list item
-        env.set(LIST_ITEM_HOVER, Color::from_hex_str("#eeeeee").unwrap());
-        env.set(LIST_ITEM_ACTIVE, Color::from_hex_str("#d2d2d2").unwrap());
-        env.set(LIST_ITEM_SELECTED, Color::from_hex_str("#c1c1c1").unwrap());
+        env.set(LIST_ITEM_SELECTED, Color::from_hex_str("#eeeeee").unwrap());
+        env.set(LIST_ITEM_HOVER, Color::from_hex_str("#d2d2d2").unwrap());
+        env.set(LIST_ITEM_ACTIVE, Color::from_hex_str("#c1c1c1").unwrap());
         // env.set(LIST_ITEM_COLOR, Color::from_hex_str("#dadada").unwrap());
+
+        // scroll widget
+        env.set(SCROLLBAR_COLOR, Color::GRAY);
+        env.set(SCROLLBAR_BORDER_COLOR, Color::GRAY);
     })
     .launch(app_state)?;
-
     Ok(())
 }
 
@@ -411,29 +460,35 @@ fn ui() -> impl Widget<AppState> {
     .vertical();
     // .lens(AppState::rooms);
 
-    let invite = Button::new("Invite");
-    let create = Button::new("Create").on_click(|ctx, data: &mut AppState, env| {
-        // dbg!(&data);
-        let origin = {
-            let window_origin = ctx.window_origin();
-            // dbg!(window_origin);
-            let size = ctx.window().get_size();
-            // dbg!(size);
-            Point::new(
-                // window_origin.x + size.width / 2.,
-                // window_origin.y + size.height / 2.,
-                size.width / 2.,
-                size.height / 2.,
-            )
-        };
-        let config = WindowConfig::default()
-            .set_level(WindowLevel::Modal)
-            .show_titlebar(true)
-            .resizable(false)
-            .window_size_policy(WindowSizePolicy::Content)
-            .set_position(origin);
-        let _subwindow = ctx.new_sub_window(config, create_room(), data.clone(), env.clone());
-    });
+    let button_height = 35.;
+    let text_size = 17.;
+    let invite = Button::from_label(Label::new("Invite").with_text_size(text_size))
+        .fix_height(button_height);
+    let create = Button::from_label(Label::new("Create").with_text_size(text_size))
+        .fix_height(button_height)
+        .on_click(|ctx, data: &mut AppState, env| {
+            // dbg!(&data);
+            let origin = {
+                let window_origin = ctx.window_origin();
+                // dbg!(window_origin);
+                let size = ctx.window().get_size();
+                // dbg!(size);
+                Point::new(
+                    // window_origin.x + size.width / 2.,
+                    // window_origin.y + size.height / 2.,
+                    size.width / 2.,
+                    size.height / 2.,
+                )
+            };
+            let config = WindowConfig::default()
+                .set_level(WindowLevel::Modal)
+                .show_titlebar(true)
+                .resizable(false)
+                .window_size_policy(WindowSizePolicy::Content)
+                .set_position(origin);
+            let _subwindow = ctx.new_sub_window(config, create_room(), data.clone(), env.clone());
+        });
+
     let buttons = Flex::row().with_child(invite).with_child(create).center();
     let left = Flex::column()
         .with_flex_child(rooms.scroll().vertical(), 9.0)
@@ -442,23 +497,37 @@ fn ui() -> impl Widget<AppState> {
         .expand_height();
 
     let textbox = TextBox::new()
+        .with_text_color(Color::from_hex_str("#333333").unwrap())
+        .with_text_size(17.)
         .controller(TextboxController)
         .lens(AppState::textbox)
-        .fix_height(25.)
-        .width(300.);
-    let send_message = Button::new("Send").on_click(|ctx, data: &mut AppState, _env| {
-        ctx.submit_command(Command::new(
-            SEND_MESSAGE,
-            SingleUse::new(data.textbox.clone()),
-            Target::Auto,
-        ));
-    });
+        // .fix_height(25.)
+        .expand()
+        .padding((5.0, 7.5))
+        .env_scope(|env, _data| {
+            // this will approximately center the box that text will occupy
+            // for this particular sizing, works well enough for now
+            env.set(theme::TEXTBOX_INSETS, Insets::uniform_xy(8.0, 11.));
+        });
+    let send_button = Button::new("Send")
+        .expand_height()
+        // .expand()
+        .padding((5.0, 7.5))
+        .on_click(|ctx, data: &mut AppState, _env| {
+            // ctx.submit_command(Command::new(
+            //     SEND_MESSAGE,
+            //     SingleUse::new(data.textbox.clone()),
+            //     Target::Auto,
+            // ));
+            ctx.submit_command(SEND_MESSAGE.with(SingleUse::new(data.textbox.clone())));
+        });
     let message_box = Flex::row()
-        .with_child(textbox)
-        .with_child(send_message)
-        .main_axis_alignment(MainAxisAlignment::Center)
+        .with_flex_child(textbox, 0.92)
+        // .with_flex_child(send_button, 0.08)
+        .with_child(send_button)
+        // .main_axis_alignment(MainAxisAlignment::Center)
         .expand_width()
-        .height(40.)
+        .height(60.)
         .center();
 
     let messages = Scroll::new(List::new(|| {
