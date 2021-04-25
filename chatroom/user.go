@@ -6,12 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
-	"github.com/davecgh/go-spew/spew"
+	"github.com/sony/sonyflake"
 	"nhooyr.io/websocket"
 )
 
-type UserMessage struct {
+type IncomingMessage struct {
 	Message string
 	// MessageType  string
 	User         string
@@ -19,7 +20,7 @@ type UserMessage struct {
 }
 
 type MessageWithCtx struct {
-	Message UserMessage
+	Message IncomingMessage
 	Ctx     context.Context
 }
 
@@ -120,8 +121,8 @@ func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	room_name := req.PostFormValue("chatroom_name")
-	if room_name == "" {
+	roomName := req.PostFormValue("chatroom_name")
+	if roomName == "" {
 		room_messages := []string{}
 		rowsJson, err := json.Marshal(room_messages)
 		if err != nil {
@@ -133,26 +134,32 @@ func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 	}
 
 	username := session.Values["username"].(string)
-	applog.Sugar.Info(room_name)
+	applog.Sugar.Info(roomName)
 	applog.Sugar.Info(username)
-	stmt := "SELECT content FROM messages WHERE chatroom_name = ?;"
+	stmt := "SELECT * FROM messages WHERE chatroom_name = ?;"
 	values := []string{"chatroom_name"}
 	query := ScyllaSession.Query(stmt, values)
-	query.Bind(room_name)
+	iter := query.Bind(roomName).Iter()
 
-	room_messages := []string{}
-	// err = query.GetRelease(&room_messages)
-	err = query.SelectRelease(&room_messages)
-	if err != nil {
-		if err.Error() != "not found" {
-			applog.Sugar.Error("Error getting current chatroom for user: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		// return err
+	roomMessages := []OutgoingMessage{}
+	var message Message
+	var outMessage OutgoingMessage
+	for iter.StructScan(&message) {
+		msgTime := sonyflake.Decompose(message.MessageId)["time"]
+		outMessage.ChatroomName = message.ChatroomName
+		outMessage.UserId = message.UserId
+		outMessage.Content = message.Content
+		// TODO: this is currently incorrect. The time given here is very incorrect
+		outMessage.Timestamp = time.Unix(int64(msgTime), 0).Format(time.RFC3339)
+
+		roomMessages = append(roomMessages, outMessage)
 	}
-	spew.Dump(room_messages)
-	rowsJson, err := json.Marshal(room_messages)
+	if err := iter.Close(); err != nil {
+		applog.Sugar.Error("Error closing iterato for chatroom messages: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	rowsJson, err := json.Marshal(roomMessages)
 	if err != nil {
 		applog.Sugar.Error("Error marshalling row data: ", err)
 	}

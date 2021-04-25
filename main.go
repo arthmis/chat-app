@@ -195,7 +195,7 @@ func init() {
 			room.Snowflake = chatroom.Snowflake
 			// room.Clients = make([]*chatroom.User, 0)
 			room.Clients = []*chatroom.ChatroomClient{}
-			room.Messages = make([]chatroom.UserMessage, 20)
+			room.Messages = make([]chatroom.IncomingMessage, 20)
 			// room.Channel = make(chan chatroom.UserMessage)
 			room.Channel = make(chan chatroom.MessageWithCtx)
 

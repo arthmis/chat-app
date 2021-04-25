@@ -330,6 +330,8 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits",
+ "serde",
+ "time 0.1.43",
  "winapi",
 ]
 
@@ -396,7 +398,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03a5d7b21829bc7b4bf4754a978a241ae54ea55a40f92bb20216e54096f4b951"
 dependencies = [
  "percent-encoding",
- "time",
+ "time 0.2.26",
  "version_check",
 ]
 
@@ -412,7 +414,7 @@ dependencies = [
  "publicsuffix",
  "serde",
  "serde_json",
- "time",
+ "time 0.2.26",
  "url",
 ]
 
@@ -511,6 +513,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-std",
+ "chrono",
  "druid",
  "futures-util",
  "http",
@@ -598,7 +601,7 @@ dependencies = [
  "objc",
  "piet-common",
  "scopeguard",
- "time",
+ "time 0.2.26",
  "tracing",
  "wasm-bindgen",
  "web-sys",
@@ -1956,7 +1959,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
- "time",
+ "time 0.2.26",
  "tokio",
  "tokio-native-tls",
  "tokio-util",
@@ -2294,6 +2297,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8018d24e04c95ac8790716a5987d0fec4f8b27249ffa0f7d33f1369bdfb88cbd"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "time"
+version = "0.1.43"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca8a50ef2360fbd1eeb0ecd46795a87a19024eb4b53c5dc916ca1fd95fe62438"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]

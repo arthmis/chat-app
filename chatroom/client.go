@@ -94,7 +94,7 @@ func OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 			break
 		}
 
-		userMessage := UserMessage{}
+		userMessage := IncomingMessage{}
 		userMessage.User = chatUser.Id
 		userMessage.Message = testMessage.Message
 		userMessage.ChatroomName = testMessage.ChatroomName

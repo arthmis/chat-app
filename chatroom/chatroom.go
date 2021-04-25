@@ -37,10 +37,17 @@ var chatroomTable = table.New(messageMetaData)
 var userTable = table.New(userMetaData)
 
 type Message struct {
+	ChatroomName string `db:"chatroom_name"`
+	UserId       string `db:"user_id"`
+	Content      string `db:"content"`
+	MessageId    uint64 `db:"message_id"`
+}
+
+type OutgoingMessage struct {
 	ChatroomName string
 	UserId       string
 	Content      string
-	MessageId    uint64 `db:"message_id"`
+	Timestamp    string
 }
 
 type ChatroomUser struct {
@@ -51,7 +58,7 @@ type Chatroom struct {
 	Id      string
 	Clients []*ChatroomClient
 	// get rid of messages field, not necessary
-	Messages []UserMessage
+	Messages []IncomingMessage
 	// Channel       chan UserMessage
 	Channel       chan MessageWithCtx
 	ScyllaSession *gocqlx.Session
@@ -78,7 +85,7 @@ func (room *Chatroom) Run() {
 		_, span := otel.Tracer("").Start(ctx, "Saving message")
 		// room.Messages = append(room.Messages, newMessage)
 		// err := room.saveMessage(newMessage)
-		err := room.saveMessage(message)
+		savedMsg, err := room.saveMessage(message)
 		// if there is an error saving the message there should be
 		// a way to communicate back to the user that sent the message
 		// that it was not sent successfully and should try again
@@ -86,7 +93,20 @@ func (room *Chatroom) Run() {
 			applog.Sugar.Error("error saving message: ", err)
 		}
 		// bytes, err := json.Marshal(newMessage)
-		bytes, err := json.Marshal(message)
+
+		snowFlakeParts := sonyflake.Decompose(savedMsg.MessageId)
+		msgTime := snowFlakeParts["time"]
+
+		outMessage := OutgoingMessage{
+			ChatroomName: savedMsg.ChatroomName,
+			UserId:       savedMsg.UserId,
+			Content:      savedMsg.Content,
+			Timestamp:    time.Unix(int64(msgTime), 0).Format(time.RFC3339),
+		}
+
+		savedMsg.MessageId = msgTime
+
+		bytes, err := json.Marshal(outMessage)
 		if err != nil {
 			span.RecordError(err)
 			applog.Sugar.Error(err)
@@ -104,11 +124,11 @@ func (room *Chatroom) Run() {
 	}
 }
 
-func (room *Chatroom) saveMessage(chatMessage UserMessage) error {
+func (room *Chatroom) saveMessage(chatMessage IncomingMessage) (Message, error) {
 	messageId, err := room.Snowflake.NextID()
 	if err != nil {
 		applog.Sugar.Error("Error generating sonyflake id: ", err)
-		return err
+		return Message{}, err
 	}
 	applog.Sugar.Info("user: ", chatMessage.User)
 
@@ -122,18 +142,17 @@ func (room *Chatroom) saveMessage(chatMessage UserMessage) error {
 	err = query.ExecRelease()
 	if err != nil {
 		applog.Sugar.Error("Error inserting message in database: ", err)
-		return err
+		return Message{}, err
 	}
 
-	return err
+	return message, err
 }
 
 func NewChatroom() *Chatroom {
 	room := new(Chatroom)
 	room.Id = ""
 	room.Clients = make([]*ChatroomClient, 0)
-	room.Messages = make([]UserMessage, 20)
-	// room.Channel = make(chan UserMessage)
+	room.Messages = make([]IncomingMessage, 20)
 	room.Channel = make(chan MessageWithCtx)
 	return room
 }

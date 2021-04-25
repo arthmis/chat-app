@@ -7,6 +7,7 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 use crate::Room;
+use crate::RoomMessage;
 
 #[derive(Deserialize, Default, Debug, Clone, Data, Lens)]
 pub struct UserInfo {
@@ -91,7 +92,7 @@ pub fn get_user_chatrooms_info(
 pub fn user_current_room_messages(
     client: &mut Client,
     selected_room: &str,
-) -> Result<Vec<String>, anyhow::Error> {
+) -> Result<Vec<RoomMessage>, anyhow::Error> {
     let res = task::block_on(async {
         let mut map = StdMap::new();
         map.insert("chatroom_name", selected_room);
@@ -101,12 +102,12 @@ pub fn user_current_room_messages(
             .form(&map)
             .send()
             .await?
-            .json::<Vec<String>>()
+            .json::<Vec<RoomMessage>>()
             .await;
         res
     });
     dbg!(&res);
-    Ok(res?.into_iter().rev().collect::<Vec<String>>())
+    Ok(res?.into_iter().rev().collect::<Vec<RoomMessage>>())
 }
 
 // establish websocket connection

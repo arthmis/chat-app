@@ -17,6 +17,7 @@ serde_json = "1"
 http = "0.2.3"
 anyhow = "1"
 tracing = "0.1.25"
+chrono = { version = "0.4", features = ["serde"] }
 
 [dependencies.async-std]
 version = "1"

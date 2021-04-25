@@ -10,12 +10,13 @@ use std::{
 };
 
 use async_std::task;
+use chrono::{DateTime, Utc};
 use druid::{
     im::HashMap,
     theme::{self, SCROLLBAR_BORDER_COLOR, SCROLLBAR_COLOR, TEXTBOX_INSETS},
     widget::{
-        Container, Controller, CrossAxisAlignment, Flex, Label, List, ListIter, MainAxisAlignment,
-        Painter, Scope, ScopeTransfer, Split, TextBox,
+        Container, Controller, CrossAxisAlignment, Flex, Label, LineBreaking, List, ListIter,
+        MainAxisAlignment, Painter, Scope, ScopeTransfer, Split, TextBox,
     },
     AppLauncher, Code, Color, Command, Data, Event, EventCtx, ExtEventSink, Insets, Key, Lens,
     Point, RenderContext, Selector, SingleUse, Target, Widget, WidgetExt, WindowConfig, WindowDesc,
@@ -151,7 +152,7 @@ impl Default for AppState {
 
 #[derive(Data, Lens, Clone)]
 struct AppState {
-    chatrooms: HashMap<String, Arc<Vec<String>>>,
+    chatrooms: HashMap<String, Arc<Vec<RoomMessage>>>,
     rooms: Arc<Vec<Room>>,
     selected_room: Option<usize>,
     http_client: Arc<Client>,
@@ -174,7 +175,7 @@ pub struct Room {
 
 impl AppState {
     fn new(
-        chatrooms: HashMap<String, Arc<Vec<String>>>,
+        chatrooms: HashMap<String, Arc<Vec<RoomMessage>>>,
         rooms: Arc<Vec<Room>>,
         selected_room: usize,
         http_client: Client,
@@ -272,8 +273,8 @@ impl Debug for AppState {
 }
 
 struct ChatroomsLens;
-impl Lens<AppState, Arc<Vec<String>>> for ChatroomsLens {
-    fn with<V, F: FnOnce(&Arc<Vec<String>>) -> V>(&self, data: &AppState, f: F) -> V {
+impl Lens<AppState, Arc<Vec<RoomMessage>>> for ChatroomsLens {
+    fn with<V, F: FnOnce(&Arc<Vec<RoomMessage>>) -> V>(&self, data: &AppState, f: F) -> V {
         if !data.rooms.is_empty() {
             match data
                 .chatrooms
@@ -287,7 +288,11 @@ impl Lens<AppState, Arc<Vec<String>>> for ChatroomsLens {
         }
     }
 
-    fn with_mut<V, F: FnOnce(&mut Arc<Vec<String>>) -> V>(&self, data: &mut AppState, f: F) -> V {
+    fn with_mut<V, F: FnOnce(&mut Arc<Vec<RoomMessage>>) -> V>(
+        &self,
+        data: &mut AppState,
+        f: F,
+    ) -> V {
         if !data.rooms.is_empty() {
             match data
                 .chatrooms
@@ -310,13 +315,29 @@ struct ChatMessage {
     room: String,
     #[serde(rename = "Message")]
     message: String,
-    // timestamp: DateTime<Utc>,
 }
 
-// #[derive(Debug, Clone, Deserialize, Data, Lens)]
-// struct Message {
+#[derive(Debug, Clone, Deserialize, Serialize, Lens)]
+pub struct RoomMessage {
+    #[serde(rename = "UserId")]
+    user: String,
+    #[serde(rename = "ChatroomName")]
+    room: String,
+    #[serde(rename = "Content")]
+    message: String,
+    #[serde(rename = "Timestamp")]
+    timestamp: DateTime<Utc>,
+}
 
-// }
+impl Data for RoomMessage {
+    fn same(&self, other: &Self) -> bool {
+        self.user.same(&other.user)
+            && self.room.same(&other.room)
+            && self.message.same(&other.message)
+            && self.timestamp == other.timestamp
+    }
+}
+
 fn login() -> impl Widget<AppState> {
     let textbox_color = Color::BLACK;
     let textbox_font_size = 21.;
@@ -572,18 +593,35 @@ fn ui() -> impl Widget<AppState> {
         .center();
 
     let messages = Scroll::new(List::new(|| {
-        // let user = Label::dynamic(|room_name: &ChatMessage, _env| room_name.to_string())
-        //     .with_text_color(Color::BLACK)
-        //     .padding(5.0);
-
-        // let message = Label::dynamic(|room_name: &ChatMessage, _env| room_name.to_string())
-        //     .with_text_color(Color::BLACK)
-        //     .padding(5.0);
-
-        // Flex::column().with_child(user).with_child(message)
-        Label::dynamic(|room_name: &String, _env| room_name.to_string())
+        let user = Label::dynamic(|data: &RoomMessage, _env| data.user.clone())
             .with_text_color(Color::BLACK)
-            .padding(5.0)
+            .with_text_size(16.);
+
+        let date = Label::dynamic(|data: &RoomMessage, _env| {
+            data.timestamp.date().format("%m/%d/%Y").to_string()
+        })
+        .with_text_color(Color::from_hex_str("#777777").unwrap())
+        .with_text_size(12.);
+
+        let message_info = Flex::row()
+            .with_child(user)
+            .with_spacer(5.)
+            .with_child(date)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .padding(5.);
+
+        let message = Label::dynamic(|message: &RoomMessage, _env| message.message.clone())
+            .with_text_size(17.)
+            .with_text_color(Color::from_hex_str("#323232").unwrap())
+            .with_line_break_mode(LineBreaking::WordWrap)
+            .padding(5.0);
+
+        Flex::column()
+            .with_child(message_info)
+            .with_child(message)
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .must_fill_main_axis(true)
+            .padding((0.0, 6.0))
     }))
     .vertical()
     .lens(ChatroomsLens)
@@ -620,7 +658,7 @@ fn ui() -> impl Widget<AppState> {
         .controller(AppStateController)
 }
 const SEND_MESSAGE: Selector<SingleUse<String>> = Selector::new("app-send-message");
-const RECEIVE_MESSAGE: Selector<SingleUse<ChatMessage>> = Selector::new("app-receive-message");
+const RECEIVE_MESSAGE: Selector<SingleUse<RoomMessage>> = Selector::new("app-receive-message");
 
 struct TextboxController;
 impl Controller<String, TextBox<String>> for TextboxController {
@@ -680,15 +718,14 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
             }
             Event::Command(selector) if selector.is(RECEIVE_MESSAGE) => {
                 let message = selector.get_unchecked(RECEIVE_MESSAGE).take().unwrap();
-                // dbg!(&data.chatrooms);
-                let messages = Arc::make_mut(&mut data.chatrooms[&message.room]);
-                messages.push(message.message);
-                data.chatrooms[&message.room] = Arc::new(messages.to_owned());
+                let room_name = message.room.clone();
+                let messages = Arc::make_mut(&mut data.chatrooms[&room_name]);
+                messages.push(message);
+                data.chatrooms[&room_name] = Arc::new(messages.to_owned());
             }
             Event::Command(selector) if selector.is(CHANGING_ROOM) => {
                 let (new_selected, room_name) = selector.get_unchecked(CHANGING_ROOM);
                 // get room's messages
-                // let (client, res) = task::block_on(async {
                 if !data.chatrooms.contains_key(room_name) {
                     let res = task::block_on(async {
                         let mut map = StdMap::new();
@@ -702,11 +739,10 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
                             .send()
                             .await
                             .unwrap()
-                            .json::<Vec<String>>()
+                            .json::<Vec<RoomMessage>>()
                             .await
                     });
-                    // dbg!(&res);
-                    let messages = res.unwrap().into_iter().rev().collect::<Vec<String>>();
+                    let messages = res.unwrap().into_iter().rev().collect::<Vec<RoomMessage>>();
                     let _room_messages = data
                         .chatrooms
                         .insert(room_name.to_owned(), Arc::new(messages));
