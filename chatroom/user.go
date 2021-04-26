@@ -46,7 +46,45 @@ type UserChatrooms struct {
 	Chatroom        string
 }
 
+func getUserChatrooms(ctx context.Context, username string) ([]string, error) {
+	stmt := "SELECT chatroom FROM users WHERE user = ?;"
+	values := []string{"user"}
+	query := ScyllaSession.Query(stmt, values)
+	query.Bind(username)
+
+	var chatrooms []string
+	err := query.Select(&chatrooms)
+	if err != nil {
+		if err.Error() != "" {
+			applog.Sugar.Error("Error finding all chatrooms for user: ", err)
+		}
+		return chatrooms, err
+	}
+
+	return chatrooms, nil
+}
+
+func getUserCurrentRoom(ctx context.Context, username string) (string, error) {
+	stmt := "SELECT current_chatroom FROM users WHERE user = ? LIMIT 1;"
+	values := []string{"user"}
+	query := ScyllaSession.Query(stmt, values)
+	query.Bind(username)
+
+	var currentRoom string
+	err := query.Get(&currentRoom)
+	if err != nil {
+		if err.Error() != "not found" {
+			applog.Sugar.Error("Error getting current chatroom for user: ", err)
+		}
+		return currentRoom, err
+	}
+
+	return currentRoom, nil
+
+}
+
 func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
 	applog.Sugar.Info("Getting user chatrooms")
 
 	session, err := database.PgStore.Get(req, "session-name")
@@ -59,36 +97,23 @@ func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 
 	username := session.Values["username"].(string)
 	applog.Sugar.Info(username)
-	stmt := "SELECT chatroom FROM users WHERE user = ?;"
-	values := []string{"user"}
-	query := ScyllaSession.Query(stmt, values)
-	query.Bind(username)
 
 	var chatrooms []string
-	err = query.SelectRelease(&chatrooms)
+	chatrooms, err = getUserChatrooms(ctx, username)
+	// TODO: maybe think about checking if user doesn't exist
+	// and return a more appropriate error?
 	if err != nil {
-		if err.Error() != "" {
-			applog.Sugar.Error("Error finding all chatrooms for user: ", err)
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		// return err
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
-	stmt = "SELECT current_chatroom FROM users WHERE user = ? LIMIT 1;"
-	values = []string{"user"}
-	query = ScyllaSession.Query(stmt, values)
-	query.Bind(username)
-
-	currentRoom := ""
-	err = query.GetRelease(&currentRoom)
+	var currentRoom string
+	currentRoom, err = getUserCurrentRoom(ctx, username)
+	// TODO: maybe think about checking if user doesn't exist
+	// and return a more appropriate error?
 	if err != nil {
-		if err.Error() != "not found" {
-			applog.Sugar.Error("Error getting current chatroom for user: ", err)
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		// return err
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	type GetChatrooms struct {

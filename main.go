@@ -181,32 +181,27 @@ func init() {
 	}
 
 	// initialize chatrooms
-	for {
-		if rows.Next() {
-			var name string
-			err = rows.Scan(&name)
-			if err != nil {
-				applog.Sugar.Fatalw("couldn't scan row: ", err)
-			}
-
-			room := chatroom.NewChatroom()
-			room.Id = name
-			room.ScyllaSession = &chatroom.ScyllaSession
-			room.Snowflake = chatroom.Snowflake
-			// room.Clients = make([]*chatroom.User, 0)
-			room.Clients = []*chatroom.ChatroomClient{}
-			room.Messages = make([]chatroom.IncomingMessage, 20)
-			// room.Channel = make(chan chatroom.UserMessage)
-			room.Channel = make(chan chatroom.MessageWithCtx)
-
-			chatroom.Chatrooms[room.Id] = room
-			chatroom.ChatroomChannels[room.Id] = room.Channel
-
-			go room.Run()
-		} else {
-			break
+	var name string
+	for rows.Next() {
+		err = rows.Scan(&name)
+		if err != nil {
+			applog.Sugar.Fatalw("couldn't scan row: ", err)
 		}
+
+		room := chatroom.NewChatroom()
+		room.Id = name
+		room.ScyllaSession = &chatroom.ScyllaSession
+		room.Snowflake = chatroom.Snowflake
+		room.Clients = []*chatroom.ChatroomClient{}
+		room.Messages = make([]chatroom.IncomingMessage, 20)
+		room.Channel = make(chan chatroom.MessageWithCtx)
+
+		chatroom.Chatrooms[room.Id] = room
+		chatroom.ChatroomChannels[room.Id] = room.Channel
+
+		go room.Run()
 	}
+
 	applog.Sugar.Infow("Chatrooms initialized.")
 }
 
