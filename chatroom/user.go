@@ -149,8 +149,9 @@ func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 		outMessage.ChatroomName = message.ChatroomName
 		outMessage.UserId = message.UserId
 		outMessage.Content = message.Content
-		// TODO: this is currently incorrect. The time given here is very incorrect
-		outMessage.Timestamp = time.Unix(int64(msgTime), 0).Format(time.RFC3339)
+		// sonyflake time is in units of 10 milliseconds
+		// divide by 100 to get the correct amount of seconds
+		outMessage.Timestamp = time.Unix(int64(msgTime/100), 0).Format(time.RFC3339)
 
 		roomMessages = append(roomMessages, outMessage)
 	}
