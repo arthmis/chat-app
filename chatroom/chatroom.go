@@ -101,7 +101,7 @@ func (room *Chatroom) Run() {
 			ChatroomName: savedMsg.ChatroomName,
 			UserId:       savedMsg.UserId,
 			Content:      savedMsg.Content,
-			Timestamp:    time.Unix(int64(msgTime), 0).Format(time.RFC3339),
+			Timestamp:    time.Unix(int64(msgTime/100), 0).Format(time.RFC3339),
 		}
 
 		savedMsg.MessageId = msgTime
