@@ -9,12 +9,10 @@ import (
 	"nhooyr.io/websocket"
 )
 
-var Clients = make(map[string]*User)
-
 func (app App) OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 	ctx, openWsSpan := otel.Tracer("").Start(req.Context(), "OpenWsConnection")
 	Sugar.Info("making ws connection")
-	// write now this doesn't handle dealing with the request origin
+	// right now this doesn't handle dealing with the request origin
 	conn, err := websocket.Accept(writer, req, nil)
 	if err != nil {
 		Sugar.Error("upgrade error: ", err)
@@ -43,10 +41,10 @@ func (app App) OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 		Id:        clientName,
 		Chatrooms: make([]string, 0),
 	}
-	Clients[clientName] = &chatUser
+	app.Clients[clientName] = &chatUser
 	stmt := "SELECT chatroom FROM users WHERE user = ?;"
 	values := []string{"user"}
-	query := ScyllaSession.Query(stmt, values)
+	query := app.ScyllaDb.Query(stmt, values)
 	query.Bind(clientName)
 
 	var chatrooms []string
@@ -61,7 +59,7 @@ func (app App) OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 		}
 	}
 	for _, name := range chatrooms {
-		Chatrooms[name].addUser(conn, clientName)
+		app.Chatrooms[name].addUser(conn, clientName)
 	}
 
 	openWsSpan.End()
@@ -102,12 +100,12 @@ func (app App) OpenWsConnection(writer http.ResponseWriter, req *http.Request) {
 		// fmt.Println()
 		// spew.Dump(ChatroomChannels)
 		// ChatroomChannels[userMessage.ChatroomName] <- userMessage
-		ChatroomChannels[userMessage.ChatroomName] <- MessageWithCtx{Message: userMessage, Ctx: ctx}
+		app.ChatroomChannels[userMessage.ChatroomName] <- MessageWithCtx{Message: userMessage, Ctx: ctx}
 		// if err != nil {
 		// 	app.Sugar.Error("could not parse Message struct: ", err)
 		// 	break
 		// }
 		span.End()
 	}
-	delete(Clients, clientName)
+	delete(app.Clients, clientName)
 }

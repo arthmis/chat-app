@@ -12,6 +12,7 @@ import (
 	"github.com/antonlindstrom/pgstore"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	"github.com/go-playground/validator"
 	"github.com/gocql/gocql"
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/stdlib"
@@ -19,7 +20,7 @@ import (
 	"github.com/sony/sonyflake"
 )
 
-// var AppState *App
+var Validate *validator.Validate = validator.New()
 
 type App struct {
 	Pg               *sql.DB
@@ -124,12 +125,12 @@ func NewApp() *App {
 	// creating scylla cluster
 	cluster := gocql.NewCluster(os.Getenv("SCYLLA_HOST"))
 	cluster.Keyspace = os.Getenv("KEYSPACE")
-	ScyllaSession, err = gocqlx.WrapSession(cluster.CreateSession())
+	app.ScyllaDb, err = gocqlx.WrapSession(cluster.CreateSession())
 	if err != nil {
 		Sugar.Fatalw("Failed to wrap new cluster session: ", err)
 	}
 
-	err = ScyllaSession.ExecStmt(
+	err = app.ScyllaDb.ExecStmt(
 		`CREATE TABLE IF NOT EXISTS messages(
 			chatroom_name TEXT,
 			user_id TEXT,
@@ -141,7 +142,7 @@ func NewApp() *App {
 	if err != nil {
 		Sugar.Fatalw("Create messages store error:", err)
 	}
-	err = ScyllaSession.ExecStmt(
+	err = app.ScyllaDb.ExecStmt(
 		`CREATE TABLE IF NOT EXISTS users(
 			user TEXT,
 			current_chatroom TEXT STATIC,
@@ -171,6 +172,8 @@ func NewApp() *App {
 
 	// initialize chatrooms
 	var name string
+	app.Chatrooms = make(map[string]*Chatroom)
+	app.ChatroomChannels = make(map[string]chan MessageWithCtx)
 	for rows.Next() {
 		err = rows.Scan(&name)
 		if err != nil {
@@ -179,18 +182,19 @@ func NewApp() *App {
 
 		room := NewChatroom()
 		room.Id = name
-		room.ScyllaSession = &ScyllaSession
+		room.ScyllaSession = &app.ScyllaDb
 		room.Snowflake = app.Snowflake
 		room.Clients = []*ChatroomClient{}
 		room.Messages = make([]IncomingMessage, 20)
 		room.Channel = make(chan MessageWithCtx)
 
-		Chatrooms[room.Id] = room
-		ChatroomChannels[room.Id] = room.Channel
+		app.Chatrooms[room.Id] = room
+		app.ChatroomChannels[room.Id] = room.Channel
 
 		go room.Run()
 	}
 
+	app.Clients = make(map[string]*User)
 	Sugar.Infow("Chatrooms initialized.")
 	return app
 }

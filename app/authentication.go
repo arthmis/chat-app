@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"database/sql"
-	"html/template"
 	"net/http"
 
 	"github.com/davecgh/go-spew/spew"
@@ -14,7 +13,6 @@ import (
 )
 
 var Decoder = schema.NewDecoder()
-var Tmpl *template.Template
 
 type UserSignup struct {
 	Email           string `form:"email" validate:"required,email,max=50"`
@@ -192,7 +190,7 @@ func (app App) Login(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		span.SetStatus(http.StatusOK, "")
 
-		err = Tmpl.ExecuteTemplate(w, "login.html", loginSuccess)
+		err = app.Tmpl.ExecuteTemplate(w, "login.html", loginSuccess)
 		if err != nil {
 			Sugar.Error("error executing template: ", err)
 			span.AddEvent("TemplateExecutionFailure")
@@ -210,7 +208,7 @@ func (app App) Login(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusOK)
 		span.SetStatus(http.StatusOK, "")
-		err = Tmpl.ExecuteTemplate(w, "login.html", loginSuccess)
+		err = app.Tmpl.ExecuteTemplate(w, "login.html", loginSuccess)
 		if err != nil {
 			Sugar.Error("error executing template: ", err)
 			span.AddEvent("TemplateExecutionFailure")

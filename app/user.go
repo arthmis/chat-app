@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/scylladb/gocqlx/v2"
 	"github.com/sony/sonyflake"
 	"nhooyr.io/websocket"
 )
@@ -44,10 +45,14 @@ type UserChatrooms struct {
 	Chatroom        string
 }
 
-func getUserChatrooms(ctx context.Context, username string) ([]string, error) {
+func getUserChatrooms(
+	ctx context.Context,
+	session gocqlx.Session,
+	username string) ([]string, error) {
+
 	stmt := "SELECT chatroom FROM users WHERE user = ?;"
 	values := []string{"user"}
-	query := ScyllaSession.Query(stmt, values)
+	query := session.Query(stmt, values)
 	query.Bind(username)
 
 	var chatrooms []string
@@ -62,10 +67,10 @@ func getUserChatrooms(ctx context.Context, username string) ([]string, error) {
 	return chatrooms, nil
 }
 
-func getUserCurrentRoom(ctx context.Context, username string) (string, error) {
+func getUserCurrentRoom(ctx context.Context, session gocqlx.Session, username string) (string, error) {
 	stmt := "SELECT current_chatroom FROM users WHERE user = ? LIMIT 1;"
 	values := []string{"user"}
-	query := ScyllaSession.Query(stmt, values)
+	query := session.Query(stmt, values)
 	query.Bind(username)
 
 	var currentRoom string
@@ -97,7 +102,7 @@ func (app App) GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 	Sugar.Info(username)
 
 	var chatrooms []string
-	chatrooms, err = getUserChatrooms(ctx, username)
+	chatrooms, err = getUserChatrooms(ctx, app.ScyllaDb, username)
 	// TODO: maybe think about checking if user doesn't exist
 	// and return a more appropriate error?
 	if err != nil {
@@ -106,7 +111,7 @@ func (app App) GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 	}
 
 	var currentRoom string
-	currentRoom, err = getUserCurrentRoom(ctx, username)
+	currentRoom, err = getUserCurrentRoom(ctx, app.ScyllaDb, username)
 	// TODO: maybe think about checking if user doesn't exist
 	// and return a more appropriate error?
 	if err != nil {
@@ -161,7 +166,7 @@ func (app App) GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 	Sugar.Info(username)
 	stmt := "SELECT * FROM messages WHERE chatroom_name = ?;"
 	values := []string{"chatroom_name"}
-	query := ScyllaSession.Query(stmt, values)
+	query := app.ScyllaDb.Query(stmt, values)
 	iter := query.Bind(roomName).Iter()
 
 	roomMessages := []OutgoingMessage{}

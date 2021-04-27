@@ -62,13 +62,6 @@ type Chatroom struct {
 	Snowflake     *sonyflake.Sonyflake
 }
 
-var Chatrooms = make(map[string]*Chatroom)
-
-// var ChatroomChannels = make(map[string]chan UserMessage)
-var ChatroomChannels = make(map[string]chan MessageWithCtx)
-var Snowflake *sonyflake.Sonyflake
-var ScyllaSession gocqlx.Session
-
 func (room *Chatroom) addUser(conn *websocket.Conn, user string) {
 	client := ChatroomClient{Conn: conn, Id: user}
 	room.Clients = append(room.Clients, &client)
@@ -224,12 +217,12 @@ func (app App) Create(writer http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	app.Clients[username].Chatrooms = append(Clients[username].Chatrooms, room.Id)
+	app.Clients[username].Chatrooms = append(app.Clients[username].Chatrooms, room.Id)
 	user := session.Values["username"].(string)
-	client := ChatroomClient{Id: Clients[user].Id, Conn: Clients[user].Conn}
+	client := ChatroomClient{Id: app.Clients[user].Id, Conn: app.Clients[user].Conn}
 	room.Clients = append(room.Clients, &client)
 	app.ChatroomChannels[room.Id] = room.Channel
-	Chatrooms[room.Id] = room
+	app.Chatrooms[room.Id] = room
 
 	go room.Run()
 
@@ -363,9 +356,9 @@ func (app App) Join(writer http.ResponseWriter, req *http.Request) {
 	}
 
 	user := session.Values["username"].(string)
-	client := ChatroomClient{Id: Clients[user].Id, Conn: app.Clients[user].Conn}
+	client := ChatroomClient{Id: app.Clients[user].Id, Conn: app.Clients[user].Conn}
 
-	Chatrooms[chatroomName].Clients = append(Chatrooms[chatroomName].Clients, &client)
+	app.Chatrooms[chatroomName].Clients = append(app.Chatrooms[chatroomName].Clients, &client)
 	// todo add chatroom to user also
 
 	// writer.WriteHeader(http.StatusInternalServerError)
