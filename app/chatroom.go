@@ -1,9 +1,6 @@
-package chatroom
+package app
 
 import (
-	"chat/applog"
-	"chat/database"
-	"chat/validate"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -90,7 +87,7 @@ func (room *Chatroom) Run() {
 		// a way to communicate back to the user that sent the message
 		// that it was not sent successfully and should try again
 		if err != nil {
-			applog.Sugar.Error("error saving message: ", err)
+			Sugar.Error("error saving message: ", err)
 		}
 		// bytes, err := json.Marshal(newMessage)
 
@@ -109,7 +106,7 @@ func (room *Chatroom) Run() {
 		bytes, err := json.Marshal(outMessage)
 		if err != nil {
 			span.RecordError(err)
-			applog.Sugar.Error(err)
+			Sugar.Error(err)
 		}
 		span.End()
 		ctx, span = otel.Tracer("").Start(ctx, "Writing message to users")
@@ -117,7 +114,7 @@ func (room *Chatroom) Run() {
 			// err = room.Clients[i].Conn.WriteMessage(websocket.TextMessage, bytes)
 			err = room.Clients[i].Conn.Write(ctx, websocket.MessageText, bytes)
 			if err != nil {
-				applog.Sugar.Error("error writing message to user ws connection: ", err)
+				Sugar.Error("error writing message to user ws connection: ", err)
 			}
 		}
 		span.End()
@@ -127,10 +124,10 @@ func (room *Chatroom) Run() {
 func (room *Chatroom) saveMessage(chatMessage IncomingMessage) (Message, error) {
 	messageId, err := room.Snowflake.NextID()
 	if err != nil {
-		applog.Sugar.Error("Error generating sonyflake id: ", err)
+		Sugar.Error("Error generating sonyflake id: ", err)
 		return Message{}, err
 	}
-	applog.Sugar.Info("user: ", chatMessage.User)
+	Sugar.Info("user: ", chatMessage.User)
 
 	message := Message{
 		ChatroomName: chatMessage.ChatroomName,
@@ -141,7 +138,7 @@ func (room *Chatroom) saveMessage(chatMessage IncomingMessage) (Message, error) 
 	query := room.ScyllaSession.Query(chatroomTable.Insert()).BindStruct(message)
 	err = query.ExecRelease()
 	if err != nil {
-		applog.Sugar.Error("Error inserting message in database: ", err)
+		Sugar.Error("Error inserting message in database: ", err)
 		return Message{}, err
 	}
 
@@ -158,24 +155,24 @@ func NewChatroom() *Chatroom {
 }
 
 // TODO think about tracking users and the rooms they are a part of
-func Create(writer http.ResponseWriter, req *http.Request) {
+func (app App) Create(writer http.ResponseWriter, req *http.Request) {
 	err := req.ParseMultipartForm(1000)
 	if err != nil {
-		applog.Sugar.Error("error parsing form: ", err)
+		Sugar.Error("error parsing form: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	session, err := database.PgStore.Get(req, "session-name")
+	session, err := app.PgStore.Get(req, "session-name")
 	if err != nil {
-		applog.Sugar.Error("error getting session name: ", err)
+		Sugar.Error("error getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	roomName := req.FormValue("chatroom_name")
-	err = validate.Validate.Var(roomName, "lt=30,gt=3,ascii")
+	err = Validate.Var(roomName, "lt=30,gt=3,ascii")
 	if err != nil {
-		applog.Sugar.Error("chatroom name was not valid: ", err)
+		Sugar.Error("chatroom name was not valid: ", err)
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -184,8 +181,8 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 
 	room := NewChatroom()
 	room.Id = roomName
-	room.Snowflake = Snowflake
-	room.ScyllaSession = &ScyllaSession
+	room.Snowflake = app.Snowflake
+	room.ScyllaSession = &app.ScyllaDb
 
 	newRoomForUser := struct {
 		User            string
@@ -201,7 +198,7 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 	query := room.ScyllaSession.Query(userTable.Insert()).BindStruct(newRoomForUser)
 	err = query.ExecRelease()
 	if err != nil {
-		applog.Sugar.Error("Error inserting new chatroom for user in user table: ", err)
+		Sugar.Error("Error inserting new chatroom for user in user table: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -211,50 +208,50 @@ func Create(writer http.ResponseWriter, req *http.Request) {
 	// query = room.ScyllaSession.Query(chatroomTable.Insert()).BindStruct(newRoomForUser)
 	// err = query.ExecRelease()
 	// if err != nil {
-	// 	applog.Sugar.Error("Error inserting new chatroom into messages table: ", err)
+	// 	Sugar.Error("Error inserting new chatroom into messages table: ", err)
 	// 	writer.WriteHeader(http.StatusInternalServerError)
 	// 	return
 	// }
 
 	// TODO: assume these ccan fail and I will have to roll back the above scylla insert
-	_, err = database.PgDB.Exec(
+	_, err = app.Pg.Exec(
 		`INSERT INTO Rooms (name) VALUES ($1)`,
 		roomName,
 	)
 	if err != nil {
-		applog.Sugar.Error("error inserting new chatroom into Rooms table: ", err)
+		Sugar.Error("error inserting new chatroom into Rooms table: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	Clients[username].Chatrooms = append(Clients[username].Chatrooms, room.Id)
+	app.Clients[username].Chatrooms = append(Clients[username].Chatrooms, room.Id)
 	user := session.Values["username"].(string)
 	client := ChatroomClient{Id: Clients[user].Id, Conn: Clients[user].Conn}
 	room.Clients = append(room.Clients, &client)
-	ChatroomChannels[room.Id] = room.Channel
+	app.ChatroomChannels[room.Id] = room.Channel
 	Chatrooms[room.Id] = room
 
 	go room.Run()
 
 	chatroomNameEncoded, err := json.Marshal(room.Id)
 	if err != nil {
-		applog.Sugar.Error(err)
+		Sugar.Error(err)
 	}
 
 	writer.WriteHeader(http.StatusCreated)
 	_, err = writer.Write(chatroomNameEncoded)
 	if err != nil {
-		applog.Sugar.Error("error writing chatroom name in response: ", err)
+		Sugar.Error("error writing chatroom name in response: ", err)
 		return
 	}
 }
 
 // TODO check to see if the user is actually a part of the chatroom
 // before they are allowed to create an invite
-func CreateInvite(w http.ResponseWriter, req *http.Request) {
+func (app App) CreateInvite(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		applog.Sugar.Error("error parsing form for create invite: ", err)
+		Sugar.Error("error parsing form for create invite: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -274,7 +271,7 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, err := w.Write([]byte("Expiry value is not one of the possible choices"))
 		if err != nil {
-			applog.Sugar.Error(err)
+			Sugar.Error(err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -282,63 +279,63 @@ func CreateInvite(w http.ResponseWriter, req *http.Request) {
 
 	inviteCodeUUID, err := uuid.NewRandom()
 	if err != nil {
-		applog.Sugar.Error("error creating random uuid: ", err)
+		Sugar.Error("error creating random uuid: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	inviteCode := inviteCodeUUID.String()
 	inviteCode = strings.ReplaceAll(inviteCode, "-", "")
-	applog.Sugar.Info(inviteCode)
+	Sugar.Info(inviteCode)
 	if forever == math.Inf(1) {
-		_, err := database.PgDB.Exec(
+		_, err := app.Pg.Exec(
 			`INSERT INTO Invites (invite, chatroom, expires) VALUES ($1, $2, $3)`,
 			inviteCode,
 			roomName,
 			"infinity",
 		)
 		if err != nil {
-			applog.Sugar.Error("error inserting invite into invites table: ", err)
+			Sugar.Error("error inserting invite into invites table: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	} else {
-		_, err := database.PgDB.Exec(
+		_, err := app.Pg.Exec(
 			`INSERT INTO Invites (invite, chatroom, expires) VALUES ($1, $2, $3)`,
 			inviteCode,
 			roomName,
 			inviteTimeLimit,
 		)
 		if err != nil {
-			applog.Sugar.Error("error inserting invite into invites table: ", err)
+			Sugar.Error("error inserting invite into invites table: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
 	encodedInviteCode, err := json.Marshal(inviteCode)
 	if err != nil {
-		applog.Sugar.Error(err)
+		Sugar.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
 	_, err = w.Write(encodedInviteCode)
 	if err != nil {
-		applog.Sugar.Error("Error writing invite code in response: ", err)
+		Sugar.Error("Error writing invite code in response: ", err)
 	}
 
 }
 
 // add validation for this endpoint
-func Join(writer http.ResponseWriter, req *http.Request) {
+func (app App) Join(writer http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		applog.Sugar.Error("error parsing form: ", err)
+		Sugar.Error("error parsing form: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 	}
 
 	inviteCode := req.FormValue("invite_code")
 
-	row := database.PgDB.QueryRow(
+	row := app.Pg.QueryRow(
 		`SELECT chatroom, expires FROM Invites WHERE invite=$1`,
 		inviteCode,
 	)
@@ -349,24 +346,24 @@ func Join(writer http.ResponseWriter, req *http.Request) {
 	var inviteExpiration string
 	err = row.Scan(&chatroomName, &inviteExpiration)
 	if err == sql.ErrNoRows {
-		applog.Sugar.Error("invite not found: ", err)
+		Sugar.Error("invite not found: ", err)
 		writer.WriteHeader(http.StatusNotFound)
 		return
 	} else if err != nil {
-		applog.Sugar.Error("err scanning row: ", err)
+		Sugar.Error("err scanning row: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	session, err := database.PgStore.Get(req, "session-name")
+	session, err := app.PgStore.Get(req, "session-name")
 	if err != nil {
-		applog.Sugar.Error("err getting session name: ", err)
+		Sugar.Error("err getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	user := session.Values["username"].(string)
-	client := ChatroomClient{Id: Clients[user].Id, Conn: Clients[user].Conn}
+	client := ChatroomClient{Id: Clients[user].Id, Conn: app.Clients[user].Conn}
 
 	Chatrooms[chatroomName].Clients = append(Chatrooms[chatroomName].Clients, &client)
 	// todo add chatroom to user also
@@ -374,13 +371,13 @@ func Join(writer http.ResponseWriter, req *http.Request) {
 	// writer.WriteHeader(http.StatusInternalServerError)
 	name, err := json.Marshal(chatroomName)
 	if err != nil {
-		applog.Sugar.Error(err)
+		Sugar.Error(err)
 	}
 
 	writer.WriteHeader(http.StatusAccepted)
 	_, err = writer.Write(name)
 	if err != nil {
-		applog.Sugar.Error("error writing chatroom name in response: ", err)
+		Sugar.Error("error writing chatroom name in response: ", err)
 		return
 	}
 }

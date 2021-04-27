@@ -1,8 +1,7 @@
-package auth
+package app
 
 import (
 	"chat/applog"
-	"chat/chatroom"
 	"chat/database"
 	"chat/validate"
 	"fmt"

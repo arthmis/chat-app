@@ -1,8 +1,6 @@
-package chatroom
+package app
 
 import (
-	"chat/applog"
-	"chat/database"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -56,7 +54,7 @@ func getUserChatrooms(ctx context.Context, username string) ([]string, error) {
 	err := query.Select(&chatrooms)
 	if err != nil {
 		if err.Error() != "" {
-			applog.Sugar.Error("Error finding all chatrooms for user: ", err)
+			Sugar.Error("Error finding all chatrooms for user: ", err)
 		}
 		return chatrooms, err
 	}
@@ -74,7 +72,7 @@ func getUserCurrentRoom(ctx context.Context, username string) (string, error) {
 	err := query.Get(&currentRoom)
 	if err != nil {
 		if err.Error() != "not found" {
-			applog.Sugar.Error("Error getting current chatroom for user: ", err)
+			Sugar.Error("Error getting current chatroom for user: ", err)
 		}
 		return currentRoom, err
 	}
@@ -83,20 +81,20 @@ func getUserCurrentRoom(ctx context.Context, username string) (string, error) {
 
 }
 
-func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
+func (app App) GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
-	applog.Sugar.Info("Getting user chatrooms")
+	Sugar.Info("Getting user chatrooms")
 
-	session, err := database.PgStore.Get(req, "session-name")
+	session, err := app.PgStore.Get(req, "session-name")
 	if err != nil {
-		applog.Sugar.Error("error getting session name: ", err)
+		Sugar.Error("error getting session name: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	applog.Sugar.Info(session)
+	Sugar.Info(session)
 
 	username := session.Values["username"].(string)
-	applog.Sugar.Info(username)
+	Sugar.Info(username)
 
 	var chatrooms []string
 	chatrooms, err = getUserChatrooms(ctx, username)
@@ -124,24 +122,24 @@ func GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 
 	rowsJson, err := json.Marshal(GetChatrooms{User: username, Chatrooms: chatrooms, CurrentRoom: currentRoom})
 	if err != nil {
-		applog.Sugar.Error("Error marshalling row data: ", err)
+		Sugar.Error("Error marshalling row data: ", err)
 	}
 
 	writer.WriteHeader(http.StatusOK)
 	writer.Write(rowsJson)
 }
 
-func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
-	session, err := database.PgStore.Get(req, "session-name")
+func (app App) GetRoomMessages(w http.ResponseWriter, req *http.Request) {
+	session, err := app.PgStore.Get(req, "session-name")
 	if err != nil {
-		applog.Sugar.Error("error getting session name: ", err)
+		Sugar.Error("error getting session name: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	err = req.ParseForm()
 	if err != nil {
-		applog.Sugar.Error("err parsing form data: ", err)
+		Sugar.Error("err parsing form data: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -151,7 +149,7 @@ func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 		room_messages := []string{}
 		rowsJson, err := json.Marshal(room_messages)
 		if err != nil {
-			applog.Sugar.Error("Error marshalling row data: ", err)
+			Sugar.Error("Error marshalling row data: ", err)
 		}
 		w.Write(rowsJson)
 		w.WriteHeader(http.StatusOK)
@@ -159,8 +157,8 @@ func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 	}
 
 	username := session.Values["username"].(string)
-	applog.Sugar.Info(roomName)
-	applog.Sugar.Info(username)
+	Sugar.Info(roomName)
+	Sugar.Info(username)
 	stmt := "SELECT * FROM messages WHERE chatroom_name = ?;"
 	values := []string{"chatroom_name"}
 	query := ScyllaSession.Query(stmt, values)
@@ -181,13 +179,13 @@ func GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 		roomMessages = append(roomMessages, outMessage)
 	}
 	if err := iter.Close(); err != nil {
-		applog.Sugar.Error("Error closing iterato for chatroom messages: ", err)
+		Sugar.Error("Error closing iterato for chatroom messages: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	rowsJson, err := json.Marshal(roomMessages)
 	if err != nil {
-		applog.Sugar.Error("Error marshalling row data: ", err)
+		Sugar.Error("Error marshalling row data: ", err)
 	}
 
 	w.WriteHeader(http.StatusOK)
