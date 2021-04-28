@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/antonlindstrom/pgstore"
@@ -33,25 +32,35 @@ type App struct {
 	Tmpl             *template.Template
 }
 
-func NewApp() *App {
+type PgConfig struct {
+	Host     string
+	Db       string
+	User     string
+	Password string
+	Port     uint16
+}
+
+type ScyllaConfig struct {
+	Host     string
+	Keyspace string
+}
+
+func NewApp(pg PgConfig, scy ScyllaConfig, templates string) *App {
 	app := new(App)
 
 	var err error
-	app.Tmpl, err = template.New("templates").ParseGlob("templates/*.html")
+	// app.Tmpl, err = template.New("templates").ParseGlob("templates/*.html")
+	app.Tmpl, err = template.New("templates").ParseGlob(templates)
 	if err != nil {
 		Sugar.Fatalw("Error instantiating templates: ", err)
 	}
 
-	dbPort, err := strconv.ParseUint(os.Getenv("POSTGRES_PORT"), 10, 16)
-	if err != nil {
-		Sugar.Fatalw("Failed to convert db port from environment variable to int: ", err)
-	}
 	app.Pg = stdlib.OpenDB(pgx.ConnConfig{
-		Host:     os.Getenv("POSTGRES_HOST"),
-		Port:     uint16(dbPort),
-		Database: os.Getenv("POSTGRES_DB"),
-		User:     os.Getenv("POSTGRES_USER"),
-		Password: os.Getenv("POSTGRES_PASSWORD"),
+		Host:     pg.Host,
+		Port:     pg.Port,
+		Database: pg.Db,
+		User:     pg.User,
+		Password: pg.Password,
 	})
 
 	app.PgStore, err = pgstore.NewPGStoreFromPool(app.Pg, []byte(os.Getenv("SESSION_SECRET")))
@@ -100,8 +109,11 @@ func NewApp() *App {
 
 	go RemoveExpiredInvites(app.Pg, time.Minute*10)
 
+	// TODO: I think I will have to figure out whether I need to remove this
+	// most likely I will. This should be unnecessary, the keyspace should be
+	// created in a different way
 	// creating temporary cassandra cluster in order to create keyspace
-	tempCluster := gocql.NewCluster(os.Getenv("SCYLLA_HOST"))
+	tempCluster := gocql.NewCluster(scy.Host)
 	tempCluster.ProtoVersion = 4
 	cqlSession, err := tempCluster.CreateSession()
 	if err != nil {
@@ -123,8 +135,8 @@ func NewApp() *App {
 	}
 
 	// creating scylla cluster
-	cluster := gocql.NewCluster(os.Getenv("SCYLLA_HOST"))
-	cluster.Keyspace = os.Getenv("KEYSPACE")
+	cluster := gocql.NewCluster(scy.Host)
+	cluster.Keyspace = scy.Keyspace
 	app.ScyllaDb, err = gocqlx.WrapSession(cluster.CreateSession())
 	if err != nil {
 		Sugar.Fatalw("Failed to wrap new cluster session: ", err)

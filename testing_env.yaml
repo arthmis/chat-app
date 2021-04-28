@@ -1,0 +1,40 @@
+services:
+  postgres:
+    container_name: chat_test_postgres
+    image: postgres:10.12
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "postgres", "-U", "chat"]
+      timeout: 30s
+      interval: 10s
+      retries: 3
+    # restart: always
+    ports:
+      - "5432:5432"
+    expose:
+      - "5432"
+    environment:
+      - "POSTGRES_USER=${PGTEST_USER}"
+      - "POSTGRES_PASSWORD=${PGTEST_PASSWORD}"
+      - "POSTGRES_DB=${PGTEST_DB}"
+    volumes:
+      # can't be white space between the colon and value after
+      - pg_test_data:/var/lib/postgresql_test/data/
+  scylla:
+    container_name: chat_test_scylla
+    # image: scylladb/scylla
+    image: cassandra:3.10
+    ports:
+      - "9042:9042"
+    volumes:
+      - scylla_test_data:/var/lib/scylladb_test/data/
+    mem_limit: 2g
+    healthcheck:
+      test: cqlsh
+      interval: 30s
+      timeout: 10s
+      start_period: 80s
+      retries: 3
+    # restart: always
+volumes:
+  pg_test_data:
+  scylla_test_data:

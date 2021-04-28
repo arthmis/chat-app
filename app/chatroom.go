@@ -149,10 +149,18 @@ func NewChatroom() *Chatroom {
 
 // TODO think about tracking users and the rooms they are a part of
 func (app App) Create(writer http.ResponseWriter, req *http.Request) {
-	err := req.ParseMultipartForm(1000)
+	err := req.ParseForm()
 	if err != nil {
 		Sugar.Error("error parsing form: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	roomName := req.FormValue("chatroom_name")
+	err = Validate.Var(roomName, "lt=30,gt=3,ascii")
+	if err != nil {
+		Sugar.Error("chatroom name was not valid: ", err)
+		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -162,11 +170,10 @@ func (app App) Create(writer http.ResponseWriter, req *http.Request) {
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	roomName := req.FormValue("chatroom_name")
-	err = Validate.Var(roomName, "lt=30,gt=3,ascii")
-	if err != nil {
-		Sugar.Error("chatroom name was not valid: ", err)
-		writer.WriteHeader(http.StatusBadRequest)
+
+	if session.ID == "" {
+		Sugar.Error("Session was empty. Session was not found")
+		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 

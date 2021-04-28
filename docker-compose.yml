@@ -20,9 +20,9 @@ services:
     expose:
       - "5432"
     environment:
-      - "POSTGRES_USER:chat"
-      - "POSTGRES_PASSWORD:postgres"
-      - "POSTGRES_DB:chat"
+      - "POSTGRES_USER=${POSTGRES_USER}"
+      - "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
+      - "POSTGRES_DB=${POSTGRES_DB}"
     volumes:
     # can't be white space between the colon and value after
       - pg_data:/var/lib/postgresql/data/

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,12 +29,58 @@ const addr = ":8000"
 var tp *sdktrace.TracerProvider
 
 func main() {
+	app.InitLogger()
 	err := godotenv.Load()
 	if err != nil {
 		app.Sugar.Fatalw("Error loading .env file: ", err)
 	}
-	app.InitLogger()
-	application := app.NewApp()
+
+	pgHost, ok := os.LookupEnv("POSTGRES_HOST")
+	if !ok {
+		app.Sugar.Fatal("Could not find POSTGRES_HOST env")
+	}
+	pgDb, ok := os.LookupEnv("POSTGRES_DB")
+	if !ok {
+		app.Sugar.Fatal("Could not find POSTGRES_DB env")
+	}
+	pgUser, ok := os.LookupEnv("POSTGRES_USER")
+	if !ok {
+		app.Sugar.Fatal("Could not find POSTGRES_USER env")
+	}
+	pgPassword, ok := os.LookupEnv("POSTGRES_PASSWORD")
+	if !ok {
+		app.Sugar.Fatal("Could not find POSTGRES_PASSWORD env")
+	}
+	pgPortStr, ok := os.LookupEnv("POSTGRES_PORT")
+	if !ok {
+		app.Sugar.Fatal("Could not find POSTGRES_PORT env")
+	}
+	pgPort, err := strconv.ParseInt(pgPortStr, 10, 16)
+	if err != nil {
+		app.Sugar.Fatalf("Could not convert POSTGRES_PORT to a number. %v", pgPortStr)
+	}
+	pgConfig := app.PgConfig{
+		Host:     pgHost,
+		Db:       pgDb,
+		User:     pgUser,
+		Password: pgPassword,
+		Port:     uint16(pgPort),
+	}
+
+	scyllaHost, ok := os.LookupEnv("SCYLLA_HOST")
+	if !ok {
+		app.Sugar.Fatal("Could not find SCYLLA_HOST env")
+	}
+	scyllaKeyspace, ok := os.LookupEnv("KEYSPACE")
+	if !ok {
+		app.Sugar.Fatal("Could not find KEYSPACE env")
+	}
+	scyConfig := app.ScyllaConfig{
+		Host:     scyllaHost,
+		Keyspace: scyllaKeyspace,
+	}
+
+	application := app.NewApp(pgConfig, scyConfig, "templates/*.html")
 	tracerCleanup := initTracer()
 	defer tracerCleanup()
 
