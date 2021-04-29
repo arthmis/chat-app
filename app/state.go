@@ -216,7 +216,7 @@ func (app App) Routes() *chi.Mux {
 	router.Use(middleware.Logger)
 	router.Route("/api", func(router chi.Router) {
 		router.With(app.UserSession).Get("/chat", chat)
-		router.With(LogRequest).With(app.UserSession).Get("/ws", app.OpenWsConnection)
+		router.With(app.UserSession).Get("/ws", app.OpenWsConnection)
 		router.Route("/room", func(router chi.Router) {
 			// add validation middleware for create
 			router.With(app.UserSession).Post("/create", app.Create)

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"net/http"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/schema"
 	"github.com/gorilla/sessions"
 	"go.opentelemetry.io/otel"
@@ -352,14 +351,6 @@ func (app App) UserSession(next http.Handler) http.Handler {
 			http.Redirect(w, req, "/login", http.StatusSeeOther)
 			return
 		}
-		next.ServeHTTP(w, req)
-	})
-}
-
-func LogRequest(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// spew.Dump(req)
-		spew.Dump(req.Header)
 		next.ServeHTTP(w, req)
 	})
 }
