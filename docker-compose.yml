@@ -36,7 +36,7 @@ services:
       - scylla
   #   # restart: on-failure
   scylla:
-    container_name: scylla
+    container_name: chat_scylla
     # image: scylladb/scylla
     image: cassandra:3.10
     ports:

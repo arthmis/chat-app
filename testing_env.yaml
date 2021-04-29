@@ -1,5 +1,5 @@
 services:
-  postgres:
+  postgres_test:
     container_name: chat_test_postgres
     image: postgres:10.12
     healthcheck:
@@ -19,7 +19,7 @@ services:
     volumes:
       # can't be white space between the colon and value after
       - pg_test_data:/var/lib/postgresql_test/data/
-  scylla:
+  scylla_test:
     container_name: chat_test_scylla
     # image: scylladb/scylla
     image: cassandra:3.10
