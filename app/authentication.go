@@ -328,6 +328,13 @@ func (app App) UserSession(next http.Handler) http.Handler {
 			return
 		}
 
+		if session.ID == "" {
+			w.WriteHeader(http.StatusInternalServerError)
+			Sugar.Error("Could not find session.")
+			return
+
+		}
+
 		username := session.Values["username"].(string)
 		Sugar.Info(username)
 

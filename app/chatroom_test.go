@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/joho/godotenv"
+	"nhooyr.io/websocket"
 )
 
 var application *App
@@ -69,6 +72,78 @@ func TestMain(m *testing.M) {
 	application = NewApp(pgConfig, scyConfig, "../templates/*.html")
 	code := m.Run()
 	os.Exit(code)
+}
+
+func authenticatedSetup() (*httptest.Server, *http.Client, *websocket.Conn, error) {
+	// figure out how to set the server listen address to port 8000
+	server := httptest.NewUnstartedServer(application.Routes())
+	server.Config.Addr = "http://localhost:8000"
+	server.Start()
+
+	var err error
+
+	client := server.Client()
+	client.Jar, err = cookiejar.New(nil)
+
+	// signup user
+	form := url.Values{}
+	form.Set("username", "artemis")
+	form.Set("email", "kup@gmail.com")
+	form.Set("password", "secretpassy")
+	form.Set("confirmPassword", "secretpassy")
+	_, err = client.PostForm(server.URL+"/api/user/signup", form)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// login user
+	form = url.Values{}
+	form.Set("email", "kup@gmail.com")
+	form.Set("password", "secretpassy")
+	_, err = client.PostForm(server.URL+"/api/user/login", form)
+	if err != nil {
+		Sugar.Error("failed to login")
+		return nil, nil, nil, err
+	}
+
+	// make websocket connection
+	options := websocket.DialOptions{
+		HTTPClient: client,
+	}
+	var conn *websocket.Conn
+	conn, _, err = websocket.Dial(context.Background(), server.URL+"/api/ws", &options)
+	if err != nil {
+		Sugar.Error("failed to get websocket connection")
+		return nil, nil, nil, err
+	}
+
+	return server, client, conn, nil
+}
+
+func TestCreateRoom(t *testing.T) {
+	server, client, conn, err := authenticatedSetup()
+	if err != nil {
+		t.Errorf("Setting up server and database was a failure: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	defer server.Close()
+
+	form := url.Values{}
+	form.Set("chatroom_name", "test chatroom")
+	res, err := client.PostForm(server.URL+"/api/room/create", form)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("handled returned wrong status code: got %v want %v", res.StatusCode, http.StatusInternalServerError)
+
+	}
+
+	err = res.Body.Close()
+	if err != nil {
+		t.Errorf("error closing body: %v", err)
+	}
 }
 
 func TestCreateRoomUnauthenticated(t *testing.T) {
