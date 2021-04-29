@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -103,47 +104,90 @@ func TestLoginWithoutSignup(t *testing.T) {
 }
 
 func TestLogout(t *testing.T) {
-	// func(t *testing.T) {
-	// 	t.Cleanup(func() {
-	// 		_, err := database.PgDB.Exec(
-	// 			`DELETE FROM users;`,
-	// 		)
-	// 		if err != nil {
-	// 			applog.Sugar.Error("error deleting all users: ", err)
-	// 		}
-	// 	})
-	// }(t)
-	// // server := httptest.NewServer(newRouter())
-	// server := httptest.NewUnstartedServer(newRouter())
-	// server.Config = &http.Server{
-	// 	Addr: "http://localhost:8000",
-	// }
-	// server.Start()
-	// defer server.Close()
+	server, client, err := serverSetup()
+	t.Cleanup(func() {
+		server.Close()
+		databaseReset()
+	})
 
-	// client := server.Client()
+	err = func() error { // Signs up a user
+		form := url.Values{}
+		form.Set("email", "test@gmail.com")
+		form.Set("username", "art")
+		form.Set("password", "secretpassy")
+		form.Set("confirmPassword", "secretpassy")
 
-	// form := url.Values{}
-	// form.Set("email", "test@gmail.com")
-	// form.Set("username", "art")
-	// form.Set("password", "secretpassy")
-	// form.Set("confirmPassword", "secretpassy")
-	// res, err := client.PostForm("/signup", form)
-	// fmt.Println(err)
-	// fmt.Println(res)
+		_, err := client.PostForm(server.URL+"/api/user/signup", form)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+			return err
+		}
 
-	// form = url.Values{}
-	// form.Set("email", "test@gmail.com")
-	// form.Set("password", "secretpassy")
-	// res, _ = client.PostForm("/login", form)
-	// applog.Sugar.Error(res)
+		form = url.Values{}
+		form.Set("email", "test@gmail.com")
+		form.Set("password", "secretpassy")
 
-	// // req, _ := http.NewRequest(http.MethodPost, "/logout", strings.NewReader(""))
-	// // res, _ := client.Do(req)
-	// // res, _ := client.Post("/logout", "text/plain", strings.NewReader(""))
-	// form = url.Values{}
-	// res, _ = client.PostForm("/logout", form)
-	// // status := res.
-	// spew.Dump(res)
+		_, err = client.PostForm(server.URL+"/api/user/login", form)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		return nil
+
+	}()
+
+	if err != nil {
+		t.Errorf("Received an error when signing up, then logging in a user: %v", err)
+	}
+
+	res, err := client.Post(server.URL+"/api/user/logout", "application/x-www-form-urlencoded", strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	// similar to login, this will redirect and since there is no static file server
+	// the client will request the main page but nothing will happen, and the server will
+	// respond with 404
+	if res.StatusCode != http.StatusNotFound {
+		t.Errorf("User art was not created. Received status code %v, wanted %v", res.StatusCode, http.StatusNotFound)
+	}
+
+	// checking if session was deleted
+	// don't know if this is right way to check if a session was deleted
+	session, err := application.PgStore.Get(res.Request, "session-name")
+	if err != nil {
+		Sugar.Error("err getting session name: ", err)
+	}
+	if session.ID != "" {
+		t.Error("Expected there to be no client.")
+	}
+
+}
+
+func TestLogoutWithoutLogin(t *testing.T) {
+	server, client, err := serverSetup()
+	t.Cleanup(func() {
+		server.Close()
+		databaseReset()
+	})
+
+	res, err := client.Post(server.URL+"/api/user/logout", "application/x-www-form-urlencoded", strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	// similar to login, this will redirect and since there is no static file server
+	// the client will request the main page but nothing will happen, and the server will
+	// respond with 404
+	if res.StatusCode != http.StatusInternalServerError {
+		t.Errorf("User art was somehow logged out although it should be impossible. Received status code %v, wanted %v", res.StatusCode, http.StatusInternalServerError)
+	}
+
+	// checking if session was deleted or not there at all
+	// don't know if this is right way to check if a session was deleted or not there
+	session, err := application.PgStore.Get(res.Request, "session-name")
+	if err != nil {
+		Sugar.Error("err getting session name: ", err)
+	}
+	if session.ID != "" {
+		t.Error("Expected there to be no client.")
+	}
 
 }

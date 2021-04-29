@@ -306,6 +306,11 @@ func (app App) Logout(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	if session.ID == "" {
+		Sugar.Error("err getting session name. It was empty: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	session.Options.MaxAge = -1
 	err = session.Save(req, w)
