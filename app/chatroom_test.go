@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -11,11 +12,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/stdlib"
 	"github.com/joho/godotenv"
 	"nhooyr.io/websocket"
 )
 
 var application *App
+var conn *sql.DB
 
 func TestMain(m *testing.M) {
 	InitLogger()
@@ -69,8 +73,43 @@ func TestMain(m *testing.M) {
 		Keyspace: scyllaKeyspace,
 	}
 
+	// connection to another "root" database lets me delete testdb
+	conn = stdlib.OpenDB(pgx.ConnConfig{
+		Host:     pgHost,
+		Port:     uint16(pgPort),
+		Database: "root",
+		User:     pgUser,
+		Password: pgPassword,
+	})
+
+	// _, err = conn.Exec("CREATE DATABASE root")
+	// if err != nil {
+	// 	Sugar.Warnf("err creating root database: %v", err)
+	// }
+
+	// create test database
+	_, err = conn.Exec("CREATE DATABASE testdb")
+	if err != nil {
+		Sugar.Warnf("err creating testdb: %v", err)
+	}
+
 	application = NewApp(pgConfig, scyConfig, "../templates/*.html")
+
 	code := m.Run()
+
+	err = application.Pg.Close()
+	if err != nil {
+		Sugar.Errorf("Error closing application connection to db: %v", err)
+	}
+
+	// dropping database to start from clean slate next time
+	// maybe dropping the tables is enough, keeping this here
+	// for now
+	// _, err = conn.Exec("DROP DATABASE IF EXISTS testdb")
+	// if err != nil {
+	// 	Sugar.Fatalf("err deleting testdb: %v", err)
+	// }
+
 	os.Exit(code)
 }
 
@@ -120,6 +159,34 @@ func authenticatedSetup() (*httptest.Server, *http.Client, *websocket.Conn, erro
 	return server, client, conn, nil
 }
 
+func authenticatedTakeDown() {
+	_, err := application.Pg.Exec("DROP TABLE IF EXISTS http_sessions")
+	if err != nil {
+		Sugar.Errorf("error dropping table http_sessions: %v", err)
+	}
+	_, err = application.Pg.Exec("DROP TABLE IF EXISTS invites")
+	if err != nil {
+		Sugar.Errorf("error dropping table invites: %v", err)
+	}
+	_, err = application.Pg.Exec("DROP TABLE IF EXISTS rooms")
+	if err != nil {
+		Sugar.Errorf("error dropping table rooms: %v", err)
+	}
+	_, err = application.Pg.Exec("DROP TABLE IF EXISTS users")
+	if err != nil {
+		Sugar.Errorf("error dropping table users: %v", err)
+	}
+
+	err = application.ScyllaDb.ExecStmt("DROP TABLE messages")
+	if err != nil {
+		Sugar.Errorf("error dropping table messages: %v", err)
+	}
+	err = application.ScyllaDb.ExecStmt("DROP TABLE users")
+	if err != nil {
+		Sugar.Errorf("error dropping table users: %v", err)
+	}
+}
+
 func TestCreateRoom(t *testing.T) {
 	server, client, conn, err := authenticatedSetup()
 	if err != nil {
@@ -144,6 +211,7 @@ func TestCreateRoom(t *testing.T) {
 	if err != nil {
 		t.Errorf("error closing body: %v", err)
 	}
+	authenticatedTakeDown()
 }
 
 func TestCreateRoomUnauthenticated(t *testing.T) {
