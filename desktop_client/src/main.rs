@@ -774,29 +774,30 @@ fn create_room() -> impl Widget<AppState> {
         let res = task::block_on(async {
             let mut map = StdMap::new();
             map.insert("chatroom_name", data.room_name.clone());
-            let form = Form::new().text("chatroom_name", data.room_name.clone());
             data.client
                 .post("http://localhost:8000/api/room/create")
-                // .form(&map)
-                .multipart(form)
+                .form(&map)
                 .send()
                 .await
                 .unwrap()
             // .json::<String>()
         });
-        if res.status() == 202 {
-            dbg!(res.status());
+        if res.status() == 201 {
+            // dbg!(res.status());
+            let room_name = task::block_on(async { res.json::<String>().await.unwrap() });
+            ctx.submit_command(Command::new(
+                CREATE_ROOM,
+                SingleUse::new(room_name),
+                // change this to specifically target main window
+                // so I will need to store parent window's id
+                Target::Global,
+            ));
+            ctx.window().close();
         } else {
+            // I will handle status that signify errors or anything else
+            // I want to figure out a way to display the error and error messages
             dbg!(res.status());
         }
-        ctx.submit_command(Command::new(
-            CREATE_ROOM,
-            SingleUse::new(data.room_name.clone()),
-            // change this to specifically target main window
-            // so I will need to store parent window's id
-            Target::Global,
-        ));
-        ctx.window().close();
     });
     let layout = Flex::column()
         .with_child(directions)
