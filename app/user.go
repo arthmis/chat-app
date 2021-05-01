@@ -76,9 +76,6 @@ func getUserCurrentRoom(ctx context.Context, session gocqlx.Session, username st
 	var currentRoom string
 	err := query.Get(&currentRoom)
 	if err != nil {
-		if err.Error() != "not found" {
-			Sugar.Error("Error getting current chatroom for user: ", err)
-		}
 		return currentRoom, err
 	}
 
@@ -103,20 +100,26 @@ func (app App) GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 
 	var chatrooms []string
 	chatrooms, err = getUserChatrooms(ctx, app.ScyllaDb, username)
-	// TODO: maybe think about checking if user doesn't exist
-	// and return a more appropriate error?
 	if err != nil {
-		writer.WriteHeader(http.StatusInternalServerError)
-		return
+		if err.Error() == "not found" {
+			Sugar.Infof("Chatrooms for user were not found: %v", err)
+		} else {
+			Sugar.Errorf("Error getting user chatrooms: %v", err)
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 
 	var currentRoom string
 	currentRoom, err = getUserCurrentRoom(ctx, app.ScyllaDb, username)
-	// TODO: maybe think about checking if user doesn't exist
-	// and return a more appropriate error?
 	if err != nil {
-		writer.WriteHeader(http.StatusInternalServerError)
-		return
+		if err.Error() == "not found" {
+			Sugar.Infof("User current chatroom not found: %v", err)
+		} else {
+			Sugar.Errorf("Error getting current user chatroom: %v", err)
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 
 	type GetChatrooms struct {

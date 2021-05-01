@@ -317,7 +317,7 @@ struct ChatMessage {
     message: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Lens)]
+#[derive(Debug, Clone, Data, Deserialize, Serialize, Lens)]
 pub struct RoomMessage {
     #[serde(rename = "UserId")]
     user: String,
@@ -327,15 +327,6 @@ pub struct RoomMessage {
     message: String,
     #[serde(rename = "Timestamp")]
     timestamp: DateTime<Utc>,
-}
-
-impl Data for RoomMessage {
-    fn same(&self, other: &Self) -> bool {
-        self.user.same(&other.user)
-            && self.room.same(&other.room)
-            && self.message.same(&other.message)
-            && self.timestamp == other.timestamp
-    }
 }
 
 fn login() -> impl Widget<AppState> {
