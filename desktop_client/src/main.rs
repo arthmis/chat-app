@@ -23,7 +23,7 @@ use druid::{
     WindowLevel, WindowSizePolicy,
 };
 use futures_util::{SinkExt, StreamExt};
-use reqwest::{multipart::Form, Client};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
@@ -67,6 +67,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     Ok(messages) => match establish_ws_conn(&cookie) {
                         Ok(stream) => {
                             let mut map = HashMap::new();
+                            let messages = group_into_user_messages(messages);
                             map.insert(selected_room, Arc::new(messages));
                             AppState::new(
                                 map,
@@ -130,6 +131,33 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
+fn group_into_user_messages(messages: Vec<RoomMessage>) -> Vec<UserMessages> {
+    if messages.is_empty() {
+        return Vec::new();
+    }
+
+    let mut prev_user = messages[0].user.clone();
+    let room = messages[0].room.clone();
+    let mut user_message = UserMessages::new(prev_user.clone(), room.clone());
+
+    let mut grouped_messages = Vec::new();
+    for message in messages.into_iter().skip(1) {
+        if message.user != prev_user {
+            // push in last set of grouped messages because their consecutive streak have ended
+            grouped_messages.push(user_message);
+            prev_user = message.user.clone();
+
+            user_message = UserMessages::new(message.user, room.clone());
+        }
+        user_message.add_message(message.message, message.timestamp);
+    }
+
+    // push the last set of grouped messages, the loop wouldn't push the last set of messages
+    grouped_messages.push(user_message);
+
+    grouped_messages
+}
+
 pub const LIST_ITEM_HOVER: Key<Color> = Key::new("chat-app.theme.list-item-hover");
 pub const LIST_ITEM_ACTIVE: Key<Color> = Key::new("chat-app.theme.list-item-active");
 pub const LIST_ITEM_SELECTED: Key<Color> = Key::new("chat-app.theme.list-item-selected");
@@ -152,7 +180,7 @@ impl Default for AppState {
 
 #[derive(Data, Lens, Clone)]
 struct AppState {
-    chatrooms: HashMap<String, Arc<Vec<RoomMessage>>>,
+    chatrooms: HashMap<String, Arc<Vec<UserMessages>>>,
     rooms: Arc<Vec<Room>>,
     selected_room: Option<usize>,
     http_client: Arc<Client>,
@@ -160,6 +188,76 @@ struct AppState {
     channel: Sender<ChatMessage>,
     textbox: String,
     user: UserInfo,
+}
+
+/// These are essentially room messages
+/// where if user posted consecutive messages, they are
+// grouped together
+///
+/// It's possible to recreate all the room messages using
+/// this struct
+#[derive(Data, Lens, Clone, Debug)]
+struct UserMessages {
+    user: String,
+    room: String,
+    messages: Arc<Vec<SubMessage>>,
+}
+
+impl UserMessages {
+    fn new(user: String, room: String) -> Self {
+        Self {
+            user,
+            room,
+            messages: Arc::new(Vec::new()),
+        }
+    }
+
+    // be aware of potential performance issues, because this makes a full
+    // copy of the Vec before it can add a message
+    // it shouldn't be a problem most of the time, and this can use im::Vector if
+    // it ever becomes a problem
+    fn add_message(&mut self, content: String, timestamp: DateTime<Utc>) {
+        let messages = Arc::make_mut(&mut self.messages);
+        messages.push(SubMessage::new(content, timestamp));
+        self.messages = Arc::new(messages.to_owned());
+    }
+}
+
+/// This will be used within `UserMessages`, it will only contain
+/// the content and timestamp of the message because `UserMessages` will
+/// contain the other relevant information
+#[derive(Data, Lens, Clone, Debug)]
+struct SubMessage {
+    content: String,
+    timestamp: DateTime<Utc>,
+}
+
+impl SubMessage {
+    fn new(content: String, timestamp: DateTime<Utc>) -> Self {
+        Self { content, timestamp }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Data, Lens)]
+struct ChatMessage {
+    #[serde(rename = "User")]
+    user: String,
+    #[serde(rename = "ChatroomName")]
+    room: String,
+    #[serde(rename = "Message")]
+    message: String,
+}
+
+#[derive(Debug, Clone, Data, Deserialize, Serialize, Lens)]
+pub struct RoomMessage {
+    #[serde(rename = "UserId")]
+    user: String,
+    #[serde(rename = "ChatroomName")]
+    room: String,
+    #[serde(rename = "Content")]
+    message: String,
+    #[serde(rename = "Timestamp")]
+    timestamp: DateTime<Utc>,
 }
 
 #[derive(Data, Lens, Clone, Debug, Eq, PartialEq, Hash)]
@@ -175,7 +273,7 @@ pub struct Room {
 
 impl AppState {
     fn new(
-        chatrooms: HashMap<String, Arc<Vec<RoomMessage>>>,
+        chatrooms: HashMap<String, Arc<Vec<UserMessages>>>,
         rooms: Arc<Vec<Room>>,
         selected_room: usize,
         http_client: Client,
@@ -273,8 +371,8 @@ impl Debug for AppState {
 }
 
 struct ChatroomsLens;
-impl Lens<AppState, Arc<Vec<RoomMessage>>> for ChatroomsLens {
-    fn with<V, F: FnOnce(&Arc<Vec<RoomMessage>>) -> V>(&self, data: &AppState, f: F) -> V {
+impl Lens<AppState, Arc<Vec<UserMessages>>> for ChatroomsLens {
+    fn with<V, F: FnOnce(&Arc<Vec<UserMessages>>) -> V>(&self, data: &AppState, f: F) -> V {
         if !data.rooms.is_empty() {
             match data
                 .chatrooms
@@ -288,7 +386,7 @@ impl Lens<AppState, Arc<Vec<RoomMessage>>> for ChatroomsLens {
         }
     }
 
-    fn with_mut<V, F: FnOnce(&mut Arc<Vec<RoomMessage>>) -> V>(
+    fn with_mut<V, F: FnOnce(&mut Arc<Vec<UserMessages>>) -> V>(
         &self,
         data: &mut AppState,
         f: F,
@@ -305,28 +403,6 @@ impl Lens<AppState, Arc<Vec<RoomMessage>>> for ChatroomsLens {
             f(&mut Arc::new(Vec::new()))
         }
     }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Data, Lens)]
-struct ChatMessage {
-    #[serde(rename = "User")]
-    user: String,
-    #[serde(rename = "ChatroomName")]
-    room: String,
-    #[serde(rename = "Message")]
-    message: String,
-}
-
-#[derive(Debug, Clone, Data, Deserialize, Serialize, Lens)]
-pub struct RoomMessage {
-    #[serde(rename = "UserId")]
-    user: String,
-    #[serde(rename = "ChatroomName")]
-    room: String,
-    #[serde(rename = "Content")]
-    message: String,
-    #[serde(rename = "Timestamp")]
-    timestamp: DateTime<Utc>,
 }
 
 fn login() -> impl Widget<AppState> {
@@ -436,6 +512,7 @@ impl Controller<LoginState, Container<LoginState>> for LoginController {
                             match user_current_room_messages(&mut client, &selected_room) {
                                 Ok(messages) => match establish_ws_conn(&cookie) {
                                     Ok(stream) => {
+                                        let messages = group_into_user_messages(messages);
                                         let mut map = HashMap::new();
                                         map.insert(selected_room, Arc::new(messages));
                                         let app_state = AppState::new(
@@ -584,34 +661,47 @@ fn ui() -> impl Widget<AppState> {
         .center();
 
     let messages = Scroll::new(List::new(|| {
-        let user = Label::dynamic(|data: &RoomMessage, _env| data.user.clone())
+        let user = Label::dynamic(|data: &UserMessages, _env| data.user.clone())
             .with_text_color(Color::BLACK)
             .with_text_size(16.);
-
-        let date = Label::dynamic(|data: &RoomMessage, _env| {
-            data.timestamp.date().format("%m/%d/%Y").to_string()
-        })
-        .with_text_color(Color::from_hex_str("#777777").unwrap())
-        .with_text_size(12.);
-
+        // figure out how to display date if I even want to
+        // let date = Label::dynamic(|data: &UserMessages, _env| {
+        //     data..date().format("%m/%d/%Y").to_string()
+        // })
+        // .with_text_color(Color::from_hex_str("#777777").unwrap())
+        // .with_text_size(12.);
         let message_info = Flex::row()
             .with_child(user)
-            .with_spacer(5.)
-            .with_child(date)
-            .main_axis_alignment(MainAxisAlignment::Start)
+            // .with_child(date)
+            .main_axis_alignment(MainAxisAlignment::SpaceBetween)
+            .must_fill_main_axis(true)
             .padding(5.);
 
-        let message = Label::dynamic(|message: &RoomMessage, _env| message.message.clone())
-            .with_text_size(17.)
-            .with_text_color(Color::from_hex_str("#323232").unwrap())
-            .with_line_break_mode(LineBreaking::WordWrap)
+        let messages = List::new(|| {
+            let message = Label::dynamic(|data: &SubMessage, _env| data.content.clone())
+                .with_text_size(17.)
+                .with_text_color(Color::from_hex_str("#323232").unwrap())
+                .with_line_break_mode(LineBreaking::WordWrap)
+                .padding(5.0);
+            let time = Label::dynamic(|data: &SubMessage, _env| {
+                data.timestamp.time().format("%I:%M %P").to_string()
+            })
+            .with_text_size(14.)
+            .with_text_color(Color::from_hex_str("#828282").unwrap())
             .padding(5.0);
+            Flex::row()
+                .with_flex_child(message, 1.0)
+                .with_child(time)
+                .main_axis_alignment(MainAxisAlignment::SpaceBetween)
+                .must_fill_main_axis(true)
+        })
+        .lens(UserMessages::messages);
 
         Flex::column()
             .with_child(message_info)
-            .with_child(message)
-            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .with_child(messages)
             .must_fill_main_axis(true)
+            .cross_axis_alignment(CrossAxisAlignment::Start)
             .padding((0.0, 6.0))
     }))
     .vertical()
@@ -711,7 +801,16 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
                 let message = selector.get_unchecked(RECEIVE_MESSAGE).take().unwrap();
                 let room_name = message.room.clone();
                 let messages = Arc::make_mut(&mut data.chatrooms[&room_name]);
-                messages.push(message);
+                if !messages.is_empty() {
+                    let last_message = messages.last_mut().unwrap();
+                    if last_message.user == message.user {
+                        last_message.add_message(message.message, message.timestamp)
+                    } else {
+                        let mut user_message = UserMessages::new(message.user, room_name.clone());
+                        user_message.add_message(message.message, message.timestamp);
+                        messages.push(user_message)
+                    }
+                }
                 data.chatrooms[&room_name] = Arc::new(messages.to_owned());
             }
             Event::Command(selector) if selector.is(CHANGING_ROOM) => {
@@ -734,6 +833,7 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
                             .await
                     });
                     let messages = res.unwrap().into_iter().rev().collect::<Vec<RoomMessage>>();
+                    let messages = group_into_user_messages(messages);
                     let _room_messages = data
                         .chatrooms
                         .insert(room_name.to_owned(), Arc::new(messages));

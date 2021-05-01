@@ -1,5 +1,5 @@
 use druid::widget::{Click, ControllerHost, Label, LabelText};
-use druid::{theme, Affine, Data, Insets, LinearGradient, UnitPoint};
+use druid::{theme, Affine, Data, Insets};
 use druid::{widget::prelude::*, Color, Key};
 use tracing::{instrument, trace};
 

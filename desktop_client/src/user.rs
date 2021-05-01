@@ -96,7 +96,6 @@ pub fn user_current_room_messages(
     let res = task::block_on(async {
         let mut map = StdMap::new();
         map.insert("chatroom_name", selected_room);
-        // map.insert("password", "secretpassy");
         let res = client
             .post("http://localhost:8000/api/room/messages")
             .form(&map)
@@ -106,7 +105,6 @@ pub fn user_current_room_messages(
             .await;
         res
     });
-    dbg!(&res);
     Ok(res?.into_iter().rev().collect::<Vec<RoomMessage>>())
 }
 
