@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"log"
 	"math"
+	"math/rand"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/scylladb/gocqlx/v2"
 	"github.com/scylladb/gocqlx/v2/table"
 	"github.com/sony/sonyflake"
@@ -246,6 +245,18 @@ func (app App) Create(writer http.ResponseWriter, req *http.Request) {
 	}
 }
 
+var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+// I will have to find a truly random sampler, but this should work for now
+func generateInvite() string {
+	b := make([]rune, 10)
+	for i := range b {
+		idx := rand.Intn(len(letterRunes))
+		b[i] = letterRunes[idx]
+	}
+	return string(b)
+}
+
 // TODO check to see if the user is actually a part of the chatroom
 // before they are allowed to create an invite
 func (app App) CreateInvite(w http.ResponseWriter, req *http.Request) {
@@ -277,14 +288,7 @@ func (app App) CreateInvite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	inviteCodeUUID, err := uuid.NewRandom()
-	if err != nil {
-		Sugar.Error("error creating random uuid: ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	inviteCode := inviteCodeUUID.String()
-	inviteCode = strings.ReplaceAll(inviteCode, "-", "")
+	inviteCode := generateInvite()
 	Sugar.Info(inviteCode)
 	if forever == math.Inf(1) {
 		_, err := app.Pg.Exec(
