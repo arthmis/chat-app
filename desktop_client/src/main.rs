@@ -628,16 +628,13 @@ fn ui() -> impl Widget<AppState> {
 
     let textbox = TextBox::new()
         .with_text_color(Color::from_hex_str("#333333").unwrap())
-        .with_text_size(17.)
+        .with_text_size(15.)
         .controller(TextboxController)
         .lens(AppState::textbox)
-        // .fix_height(25.)
-        .expand()
+        .expand_width()
         .padding((5.0, 7.5))
         .env_scope(|env, _data| {
-            // this will approximately center the box that text will occupy
-            // for this particular sizing, works well enough for now
-            env.set(theme::TEXTBOX_INSETS, Insets::uniform_xy(8.0, 11.));
+            env.set(theme::TEXTBOX_INSETS, Insets::uniform_xy(10.0, 11.));
         });
     let send_button = Button::new("Send")
         .expand_height()
