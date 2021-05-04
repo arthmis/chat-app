@@ -79,7 +79,7 @@ pub fn get_user_chatrooms_info(
     let rooms = rooms
         .into_iter()
         .enumerate()
-        .map(|(idx, name)| Room { name, idx })
+        .map(|(idx, name)| Room { name })
         .collect::<Vec<Room>>();
 
     let selected_room = res.current_room;

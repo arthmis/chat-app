@@ -272,7 +272,6 @@ pub struct RoomMessage {
 #[derive(Data, Lens, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Room {
     name: String,
-    idx: usize,
 }
 
 // struct User {
@@ -859,10 +858,7 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
                 data.chatrooms.selected = Some(data.chatrooms.rooms.len());
 
                 let new_rooms = Arc::make_mut(&mut data.chatrooms.rooms);
-                new_rooms.push(Room {
-                    name: new_room,
-                    idx: new_rooms.len(),
-                });
+                new_rooms.push(Room { name: new_room });
                 data.chatrooms.rooms = Arc::new(new_rooms.to_owned());
 
                 ctx.request_paint();
