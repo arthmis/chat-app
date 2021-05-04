@@ -167,9 +167,12 @@ impl Default for AppState {
     fn default() -> Self {
         let (tx, _) = std::sync::mpsc::channel();
         AppState {
-            chatrooms: HashMap::new(),
+            chatroom_messages: HashMap::new(),
             selected_room: None,
-            rooms: Arc::new(Vec::new()),
+            chatrooms: ChatRooms {
+                rooms: Arc::new(Vec::new()),
+                selected: None,
+            },
             http_client: Arc::new(Client::new()),
             channel: tx,
             textbox: String::new(),
@@ -180,14 +183,20 @@ impl Default for AppState {
 
 #[derive(Data, Lens, Clone)]
 struct AppState {
-    chatrooms: HashMap<String, Arc<Vec<UserMessages>>>,
-    rooms: Arc<Vec<Room>>,
+    chatroom_messages: HashMap<String, Arc<Vec<UserMessages>>>,
+    chatrooms: ChatRooms,
     selected_room: Option<usize>,
     http_client: Arc<Client>,
     #[data(ignore)]
     channel: Sender<ChatMessage>,
     textbox: String,
     user: UserInfo,
+}
+
+#[derive(Debug, Data, Clone)]
+struct ChatRooms {
+    rooms: Arc<Vec<Room>>,
+    selected: Option<usize>,
 }
 
 /// These are essentially room messages
@@ -349,8 +358,11 @@ impl AppState {
             Some(selected_room)
         };
         Self {
-            chatrooms,
-            rooms,
+            chatroom_messages: chatrooms,
+            chatrooms: ChatRooms {
+                rooms,
+                selected: selected_room,
+            },
             selected_room,
             http_client: Arc::new(http_client),
             channel: tx,
@@ -363,8 +375,8 @@ impl AppState {
 impl Debug for AppState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AppState")
-            .field("chatrooms", &self.chatrooms)
-            .field("rooms", &self.rooms)
+            .field("chatrooms", &self.chatroom_messages)
+            .field("rooms", &self.chatrooms)
             .field("selected_room", &self.selected_room)
             .finish()
     }
@@ -373,10 +385,10 @@ impl Debug for AppState {
 struct ChatroomsLens;
 impl Lens<AppState, Arc<Vec<UserMessages>>> for ChatroomsLens {
     fn with<V, F: FnOnce(&Arc<Vec<UserMessages>>) -> V>(&self, data: &AppState, f: F) -> V {
-        if !data.rooms.is_empty() {
+        if !data.chatrooms.rooms.is_empty() {
             match data
-                .chatrooms
-                .get(&data.rooms[data.selected_room.unwrap()].name)
+                .chatroom_messages
+                .get(&data.chatrooms.rooms[data.chatrooms.selected.unwrap()].name)
             {
                 Some(room) => f(room),
                 None => f(&Arc::new(Vec::new())),
@@ -391,10 +403,10 @@ impl Lens<AppState, Arc<Vec<UserMessages>>> for ChatroomsLens {
         data: &mut AppState,
         f: F,
     ) -> V {
-        if !data.rooms.is_empty() {
+        if !data.chatrooms.rooms.is_empty() {
             match data
-                .chatrooms
-                .get_mut(&data.rooms[data.selected_room.unwrap()].name)
+                .chatroom_messages
+                .get_mut(&data.chatrooms.rooms[data.chatrooms.selected.unwrap()].name)
             {
                 Some(room) => f(room),
                 None => f(&mut Arc::new(Vec::new())),
@@ -552,17 +564,16 @@ impl Controller<LoginState, Container<LoginState>> for LoginController {
 const ATTEMPT_LOGIN: Selector<()> = Selector::new("ATTEMPT_LOGIN");
 fn ui() -> impl Widget<AppState> {
     let rooms = Scroll::new(List::new(|| {
-        // Label::dynamic(|(room, selected_room), _env| room.name.to_string())
-        Label::dynamic(|data: &(Room, usize), _env| data.0.name.to_string())
+        Label::dynamic(|data: &(Room, usize, usize), _env| data.0.name.to_string())
             .with_text_color(Color::BLACK)
             .center()
             .expand_width()
             .padding(10.0)
-            .background(Painter::new(|ctx, data: &(Room, usize), env| {
+            .background(Painter::new(|ctx, data: &(Room, usize, usize), env| {
                 let is_hot = ctx.is_hot();
                 let is_active = ctx.is_active();
-                let (room, selected) = data;
-                let is_selected = room.idx == *selected;
+                let (room, idx, selected) = data;
+                let is_selected = *idx == *selected;
 
                 let background_color = if is_active {
                     env.get(LIST_ITEM_ACTIVE)
@@ -579,15 +590,16 @@ fn ui() -> impl Widget<AppState> {
                 ctx.fill(rect, &background_color);
             }))
             .on_click(|ctx, data, _env| {
-                let (room, _selected) = data;
+                let (_room, idx, _selected) = data;
                 ctx.submit_command(Command::new(
                     CHANGING_ROOM,
-                    (room.idx, data.0.name.clone()),
+                    (*idx, data.0.name.clone()),
                     Target::Auto,
                 ));
             })
     }))
-    .vertical();
+    .vertical()
+    .lens(AppState::chatrooms);
     // .lens(AppState::rooms);
 
     let button_height = 35.;
@@ -707,8 +719,8 @@ fn ui() -> impl Widget<AppState> {
     .padding(5.0);
     let room_menu = {
         let room_name = Label::dynamic(|data: &AppState, _env| {
-            if let Some(selected) = data.selected_room {
-                data.rooms[selected].name.clone()
+            if let Some(selected) = data.chatrooms.selected {
+                data.chatrooms.rooms[selected].name.clone()
             } else {
                 "".to_string()
             }
@@ -781,7 +793,9 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
                 let message = selector.get_unchecked(SEND_MESSAGE).take().unwrap();
                 let message = ChatMessage {
                     user: data.user.name.to_owned(),
-                    room: data.rooms[data.selected_room.unwrap()].name.clone(),
+                    room: data.chatrooms.rooms[data.chatrooms.selected.unwrap()]
+                        .name
+                        .clone(),
                     message,
                 };
 
@@ -797,23 +811,22 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
             Event::Command(selector) if selector.is(RECEIVE_MESSAGE) => {
                 let message = selector.get_unchecked(RECEIVE_MESSAGE).take().unwrap();
                 let room_name = message.room.clone();
-                let messages = Arc::make_mut(&mut data.chatrooms[&room_name]);
-                if !messages.is_empty() {
+                let messages = Arc::make_mut(&mut data.chatroom_messages[&room_name]);
+                // I think this will also add a new grouped message if the message date isn't the same
+                if !messages.is_empty() && messages.last().unwrap().user == message.user {
                     let last_message = messages.last_mut().unwrap();
-                    if last_message.user == message.user {
-                        last_message.add_message(message.message, message.timestamp)
-                    } else {
-                        let mut user_message = UserMessages::new(message.user, room_name.clone());
-                        user_message.add_message(message.message, message.timestamp);
-                        messages.push(user_message)
-                    }
+                    last_message.add_message(message.message, message.timestamp)
+                } else {
+                    let mut user_message = UserMessages::new(message.user, room_name.clone());
+                    user_message.add_message(message.message, message.timestamp);
+                    messages.push(user_message)
                 }
-                data.chatrooms[&room_name] = Arc::new(messages.to_owned());
+                data.chatroom_messages[&room_name] = Arc::new(messages.to_owned());
             }
             Event::Command(selector) if selector.is(CHANGING_ROOM) => {
                 let (new_selected, room_name) = selector.get_unchecked(CHANGING_ROOM);
                 // get room's messages
-                if !data.chatrooms.contains_key(room_name) {
+                if !data.chatroom_messages.contains_key(room_name) {
                     let res = task::block_on(async {
                         let mut map = StdMap::new();
                         let room = room_name.to_owned();
@@ -832,25 +845,25 @@ impl Controller<AppState, Container<AppState>> for AppStateController {
                     let messages = res.unwrap().into_iter().rev().collect::<Vec<RoomMessage>>();
                     let messages = group_into_user_messages(messages);
                     let _room_messages = data
-                        .chatrooms
+                        .chatroom_messages
                         .insert(room_name.to_owned(), Arc::new(messages));
                 }
-                data.selected_room = Some(*new_selected);
+                data.chatrooms.selected = Some(*new_selected);
             }
             Event::Command(selector) if selector.is(CREATE_ROOM) => {
                 let new_room = selector.get_unchecked(CREATE_ROOM).take().unwrap();
 
-                data.chatrooms
+                data.chatroom_messages
                     .insert(new_room.clone(), Arc::new(Vec::new()));
 
-                data.selected_room = Some(data.rooms.len());
+                data.chatrooms.selected = Some(data.chatrooms.rooms.len());
 
-                let new_rooms = Arc::make_mut(&mut data.rooms);
+                let new_rooms = Arc::make_mut(&mut data.chatrooms.rooms);
                 new_rooms.push(Room {
                     name: new_room,
                     idx: new_rooms.len(),
                 });
-                data.rooms = Arc::new(new_rooms.to_owned());
+                data.chatrooms.rooms = Arc::new(new_rooms.to_owned());
 
                 ctx.request_paint();
             }
@@ -937,27 +950,27 @@ impl ScopeTransfer for InviteTransfer {
     }
 }
 
-impl ListIter<(Room, usize)> for AppState {
-    fn for_each(&self, mut cb: impl FnMut(&(Room, usize), usize)) {
+impl ListIter<(Room, usize, usize)> for ChatRooms {
+    fn for_each(&self, mut cb: impl FnMut(&(Room, usize, usize), usize)) {
         for (i, item) in self.rooms.iter().enumerate() {
-            let d = (item.to_owned(), self.selected_room.unwrap());
+            let d = (item.to_owned(), i, self.selected.unwrap());
             cb(&d, i);
         }
     }
 
-    fn for_each_mut(&mut self, mut cb: impl FnMut(&mut (Room, usize), usize)) {
+    fn for_each_mut(&mut self, mut cb: impl FnMut(&mut (Room, usize, usize), usize)) {
         let mut new_data = Vec::with_capacity(self.data_len());
         let mut any_changed = false;
-        let mut new_selected = self.selected_room;
+        let mut new_selected = self.selected;
 
         for (i, item) in self.rooms.iter().enumerate() {
-            let mut d = (item.to_owned(), self.selected_room.unwrap());
+            let mut d = (item.to_owned(), i, self.selected.unwrap());
             cb(&mut d, i);
 
             // if !any_changed && !(*item, i, self.selected_room).same(&d) {
-            if !any_changed && !self.selected_room.unwrap().same(&d.1) {
+            if !any_changed && !self.selected.unwrap().same(&d.2) {
                 any_changed = true;
-                new_selected = Some(d.1);
+                new_selected = Some(d.2);
             }
             // dbg!(any_changed);
             new_data.push(d.0);
@@ -965,7 +978,7 @@ impl ListIter<(Room, usize)> for AppState {
 
         if any_changed {
             self.rooms = Arc::new(new_data);
-            self.selected_room = new_selected;
+            self.selected = new_selected;
         }
     }
 
