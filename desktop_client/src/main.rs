@@ -13,10 +13,11 @@ use async_std::task;
 use chrono::{DateTime, Utc};
 use druid::{
     im::HashMap,
+    text::{Formatter, Validation},
     theme::{self, SCROLLBAR_BORDER_COLOR, SCROLLBAR_COLOR, TEXTBOX_INSETS},
     widget::{
         Container, Controller, CrossAxisAlignment, Flex, Label, LineBreaking, List, ListIter,
-        MainAxisAlignment, Painter, Scope, ScopeTransfer, Split, TextBox,
+        MainAxisAlignment, Painter, Scope, ScopeTransfer, Split, TextBox, ValueTextBox,
     },
     AppLauncher, Code, Color, Command, Data, Event, EventCtx, ExtEventSink, Insets, Key, Lens,
     Point, RenderContext, Selector, SingleUse, Target, Widget, WidgetExt, WindowConfig, WindowDesc,
@@ -416,6 +417,29 @@ impl Lens<AppState, Arc<Vec<UserMessages>>> for ChatroomsLens {
     }
 }
 
+struct PasswordFormatter;
+impl Formatter<String> for PasswordFormatter {
+    fn format(&self, value: &String) -> String {
+        value.to_owned()
+    }
+    fn format_for_editing(&self, value: &String) -> String {
+        self.format(value)
+    }
+
+    fn validate_partial_input(
+        &self,
+        input: &str,
+        sel: &druid::text::Selection,
+    ) -> druid::text::Validation {
+        let display_txt = input.chars().map(|char| "●").collect();
+        Validation::success().change_text(display_txt)
+    }
+
+    fn value(&self, input: &str) -> Result<String, druid::text::ValidationError> {
+        Ok(input.to_owned())
+    }
+}
+
 fn login() -> impl Widget<AppState> {
     let textbox_color = Color::BLACK;
     let textbox_font_size = 21.;
@@ -440,7 +464,8 @@ fn login() -> impl Widget<AppState> {
         .with_text_color(Color::BLACK);
     let password_textbox = TextBox::new()
         .with_text_size(textbox_font_size)
-        .with_text_color(textbox_color)
+        .with_text_color(textbox_color);
+    let password_textbox = ValueTextBox::new(password_textbox, PasswordFormatter)
         .controller(FormController)
         .fix_width(200.)
         .lens(LoginState::password);
@@ -482,13 +507,13 @@ struct LoginState {
 
 struct FormController;
 
-impl Controller<String, TextBox<String>> for FormController {
+impl<T: Data, W: Widget<T>> Controller<T, W> for FormController {
     fn event(
         &mut self,
-        child: &mut TextBox<String>,
+        child: &mut W,
         ctx: &mut EventCtx,
         event: &Event,
-        data: &mut String,
+        data: &mut T,
         env: &druid::Env,
     ) {
         if let Event::KeyUp(key) = event {
