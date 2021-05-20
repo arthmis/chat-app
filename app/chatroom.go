@@ -4,9 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
-	"math"
-	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/scylladb/gocqlx/v2"
@@ -15,6 +14,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"nhooyr.io/websocket"
 )
+
+const webUrl = "http://localhost:8000"
 
 var messageMetaData = table.Metadata{
 	Name:    "messages",
@@ -245,18 +246,6 @@ func (app App) Create(writer http.ResponseWriter, req *http.Request) {
 	}
 }
 
-var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-
-// I will have to find a truly random sampler, but this should work for now
-func generateInvite() string {
-	b := make([]rune, 10)
-	for i := range b {
-		idx := rand.Intn(len(letterRunes))
-		b[i] = letterRunes[idx]
-	}
-	return string(b)
-}
-
 // TODO check to see if the user is actually a part of the chatroom
 // before they are allowed to create an invite
 func (app App) CreateInvite(w http.ResponseWriter, req *http.Request) {
@@ -267,61 +256,48 @@ func (app App) CreateInvite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	roomName := req.FormValue("chatroom_name")
-	now := time.Now()
-	// timeLimit := req.FormValue("invite_timelimit")
-	inviteTimeLimit := time.Time{}
-	forever := 0.0
+
+	var inviteTimeLimit InviteTimeLimit
 	switch timeLimit := req.FormValue("invite_timelimit"); timeLimit {
 	case "1 day":
-		inviteTimeLimit = now.Add(time.Hour * 24)
+		inviteTimeLimit = InviteTimeLimit{
+			limit: 1,
+		}
 	case "1 week":
-		inviteTimeLimit = now.Add(time.Hour * 24 * 7)
+		inviteTimeLimit = InviteTimeLimit{
+			limit: 7,
+		}
 	case "Forever":
-		forever = math.Inf(1)
+		inviteTimeLimit = InviteTimeLimit{
+			// this will represent infinity
+			limit: 0,
+		}
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		_, err := w.Write([]byte("Expiry value is not one of the possible choices"))
 		if err != nil {
-			Sugar.Error(err)
+			Sugar.Error(req.FormValue("invite_timelimit"), err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
 	}
 
-	inviteCode := generateInvite()
-	Sugar.Info(inviteCode)
-	if forever == math.Inf(1) {
-		_, err := app.Pg.Exec(
-			`INSERT INTO Invites (invite, chatroom, expires) VALUES ($1, $2, $3)`,
-			inviteCode,
-			roomName,
-			"infinity",
-		)
-		if err != nil {
-			Sugar.Error("error inserting invite into invites table: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-	} else {
-		_, err := app.Pg.Exec(
-			`INSERT INTO Invites (invite, chatroom, expires) VALUES ($1, $2, $3)`,
-			inviteCode,
-			roomName,
-			inviteTimeLimit,
-		)
-		if err != nil {
-			Sugar.Error("error inserting invite into invites table: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-	}
-	encodedInviteCode, err := json.Marshal(inviteCode)
+	inviteCode, err := app.Invitations.createInvite(roomName, inviteTimeLimit)
 	if err != nil {
 		Sugar.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusAccepted)
+
+	Sugar.Info(inviteCode)
+
+	encodedInviteCode, err := json.Marshal(webUrl + "/room/join/" + inviteCode)
+	if err != nil {
+		Sugar.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
 	_, err = w.Write(encodedInviteCode)
 	if err != nil {
 		Sugar.Error("Error writing invite code in response: ", err)
@@ -329,35 +305,18 @@ func (app App) CreateInvite(w http.ResponseWriter, req *http.Request) {
 
 }
 
-// add validation for this endpoint
 func (app App) Join(writer http.ResponseWriter, req *http.Request) {
-	err := req.ParseForm()
+	inviteCode := strings.Split(req.URL.String(), "/api/room/join/")[1]
+	chatroomName, err := app.Invitations.getChatroom(inviteCode)
+	// TODO: I will need to handle multiple errors here
+	// inviteNoteFound
+	// DatabaseError
 	if err != nil {
-		Sugar.Error("error parsing form: ", err)
-		writer.WriteHeader(http.StatusInternalServerError)
-	}
-
-	inviteCode := req.FormValue("invite_code")
-
-	row := app.Pg.QueryRow(
-		`SELECT chatroom, expires FROM Invites WHERE invite=$1`,
-		inviteCode,
-	)
-
-	var chatroomName string
-	// TODO: use this to figure out whether invite is past its expiration
-	// before allowing user to use it
-	var inviteExpiration string
-	err = row.Scan(&chatroomName, &inviteExpiration)
-	if err == sql.ErrNoRows {
-		Sugar.Error("invite not found: ", err)
-		writer.WriteHeader(http.StatusNotFound)
-		return
-	} else if err != nil {
-		Sugar.Error("err scanning row: ", err)
+		Sugar.Error(err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	Sugar.Info(inviteCode, chatroomName)
 
 	session, err := app.PgStore.Get(req, "session-name")
 	if err != nil {

@@ -30,6 +30,7 @@ type App struct {
 	Clients          map[string]*User
 	ChatroomChannels map[string]chan MessageWithCtx
 	Tmpl             *template.Template
+	Invitations      *Invitations
 }
 
 type PgConfig struct {
@@ -62,6 +63,10 @@ func NewApp(pg PgConfig, scy ScyllaConfig, templates string) *App {
 		User:     pg.User,
 		Password: pg.Password,
 	})
+
+	app.Invitations = &Invitations{
+		pg: app.Pg,
+	}
 
 	app.PgStore, err = pgstore.NewPGStoreFromPool(app.Pg, []byte(os.Getenv("SESSION_SECRET")))
 	if err != nil {
@@ -221,7 +226,7 @@ func (app App) Routes() *chi.Mux {
 			// add validation middleware for create
 			router.With(app.UserSession).Post("/create", app.Create)
 			// add validation middleware for join
-			router.With(app.UserSession).Post("/join", app.Join)
+			router.With(app.UserSession).Post("/join/*", app.Join)
 			// add validation middleware for invite
 			router.With(app.UserSession).Post("/invite", app.CreateInvite)
 			// add validation middleware for messages
