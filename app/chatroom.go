@@ -3,6 +3,7 @@ package app
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/scylladb/gocqlx/v2/table"
 	"github.com/sony/sonyflake"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 	"nhooyr.io/websocket"
 )
 
@@ -149,8 +151,13 @@ func NewChatroom() *Chatroom {
 
 // TODO think about tracking users and the rooms they are a part of
 func (app App) Create(writer http.ResponseWriter, req *http.Request) {
+	_, span := otel.Tracer("").Start(req.Context(), "CreateRoom")
+	defer span.End()
+
 	err := req.ParseForm()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "error parsing form")
 		Sugar.Error("error parsing form: ", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
@@ -160,6 +167,8 @@ func (app App) Create(writer http.ResponseWriter, req *http.Request) {
 	err = Validate.Var(roomName, "lt=30,gt=3,ascii")
 	if err != nil {
 		Sugar.Error("chatroom name was not valid: ", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Ok, "chatroom name was not valid")
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -167,12 +176,16 @@ func (app App) Create(writer http.ResponseWriter, req *http.Request) {
 	session, err := app.PgStore.Get(req, "session-name")
 	if err != nil {
 		Sugar.Error("error getting session name: ", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "error getting session name")
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	if session.ID == "" {
 		Sugar.Error("Session was empty. Session was not found")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "session was empty")
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -199,6 +212,8 @@ func (app App) Create(writer http.ResponseWriter, req *http.Request) {
 	err = query.ExecRelease()
 	if err != nil {
 		Sugar.Error("Error inserting new chatroom for user in user table: ", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "error inserting new chatroom for user in user table")
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -220,6 +235,8 @@ func (app App) Create(writer http.ResponseWriter, req *http.Request) {
 	)
 	if err != nil {
 		Sugar.Error("error inserting new chatroom into Rooms table: ", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "error inserting new chatroom into Rooms table")
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -236,12 +253,18 @@ func (app App) Create(writer http.ResponseWriter, req *http.Request) {
 	chatroomNameEncoded, err := json.Marshal(room.Id)
 	if err != nil {
 		Sugar.Error(err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "error mashalling room.Id")
 	}
 
 	writer.WriteHeader(http.StatusCreated)
+	span.SetStatus(codes.Ok, "room was created")
 	_, err = writer.Write(chatroomNameEncoded)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Error writing encoded chatroom name in response")
 		Sugar.Error("error writing chatroom name in response: ", err)
+		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
@@ -249,9 +272,14 @@ func (app App) Create(writer http.ResponseWriter, req *http.Request) {
 // TODO check to see if the user is actually a part of the chatroom
 // before they are allowed to create an invite
 func (app App) CreateInvite(w http.ResponseWriter, req *http.Request) {
+	_, span := otel.Tracer("").Start(req.Context(), "CreateInvite")
+	defer span.End()
+
 	err := req.ParseForm()
 	if err != nil {
 		Sugar.Error("error parsing form for create invite: ", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "error parsing form for create invite")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -273,9 +301,13 @@ func (app App) CreateInvite(w http.ResponseWriter, req *http.Request) {
 			limit: 0,
 		}
 	default:
+		span.AddEvent("InviteBadRequest")
+		span.SetStatus(codes.Ok, fmt.Sprintf("bad invite: %v", timeLimit))
 		w.WriteHeader(http.StatusBadRequest)
 		_, err := w.Write([]byte("Expiry value is not one of the possible choices"))
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "error writing response")
 			Sugar.Error(req.FormValue("invite_timelimit"), err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
@@ -285,27 +317,36 @@ func (app App) CreateInvite(w http.ResponseWriter, req *http.Request) {
 	inviteCode, err := app.Invitations.createInvite(roomName, inviteTimeLimit)
 	if err != nil {
 		Sugar.Error(err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "invite code not successfully created")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	Sugar.Info(inviteCode)
 
 	encodedInviteCode, err := json.Marshal(webUrl + "/room/join/" + inviteCode)
 	if err != nil {
 		Sugar.Error(err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "marshalling failed")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
+	span.SetStatus(codes.Ok, "invite code created")
+
 	_, err = w.Write(encodedInviteCode)
 	if err != nil {
 		Sugar.Error("Error writing invite code in response: ", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "marshalling failed")
 	}
 
 }
 
 func (app App) Join(writer http.ResponseWriter, req *http.Request) {
+	_, span := otel.Tracer("").Start(req.Context(), "JoinRoom")
+	defer span.End()
+
 	inviteCode := strings.Split(req.URL.String(), "/api/room/join/")[1]
 	chatroomName, err := app.Invitations.getChatroom(inviteCode)
 	// TODO: I will need to handle multiple errors here
@@ -313,6 +354,8 @@ func (app App) Join(writer http.ResponseWriter, req *http.Request) {
 	// DatabaseError
 	if err != nil {
 		Sugar.Error(err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "")
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -321,6 +364,8 @@ func (app App) Join(writer http.ResponseWriter, req *http.Request) {
 	session, err := app.PgStore.Get(req, "session-name")
 	if err != nil {
 		Sugar.Error("err getting session name: ", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "error getting session name")
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -335,13 +380,20 @@ func (app App) Join(writer http.ResponseWriter, req *http.Request) {
 	name, err := json.Marshal(chatroomName)
 	if err != nil {
 		Sugar.Error(err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "error masharlling chatroom name")
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	writer.WriteHeader(http.StatusAccepted)
+	span.SetStatus(codes.Ok, "successfully joined chatroom")
 	_, err = writer.Write(name)
 	if err != nil {
 		Sugar.Error("error writing chatroom name in response: ", err)
-		return
+		span.RecordError(err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		span.SetStatus(codes.Error, "error writing chatroom name in response")
 	}
 }
 

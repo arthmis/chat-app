@@ -240,7 +240,7 @@ func (app App) Routes() *chi.Mux {
 			// add validation middleware for login
 			router.Post("/login", app.Login)
 			router.With(app.UserSession).Post("/logout", app.Logout)
-			// router.With(auth.UserSession).Post("/", user.GetUser)
+			// router.With(auth.UserSession).Get("/", user.GetUser)
 		})
 	})
 	return router

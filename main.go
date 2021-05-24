@@ -13,13 +13,12 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpgrpc"
-	"go.opentelemetry.io/otel/metric/global"
+	"google.golang.org/grpc"
 
 	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
 	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"google.golang.org/grpc"
 
 	"chat/app"
 )
@@ -154,6 +153,9 @@ func initTracer() func() {
 	)
 
 	err = pusher.Start(ctx)
+	if err != nil {
+		app.Sugar.Warn("error starting pusher: ", err)
+	}
 
 	bsp := sdktrace.NewBatchSpanProcessor(exporter)
 	provider := sdktrace.NewTracerProvider(
@@ -162,7 +164,7 @@ func initTracer() func() {
 		// sdktrace.WithBatcher(exporter),
 	)
 	otel.SetTracerProvider(provider)
-	global.SetMeterProvider(pusher.MeterProvider())
+	// global.SetMeterProvider(pusher.MeterProvider())
 	// propagator := propagation.NewCompositeTextMapPropagator(propagation.Baggage{}, propagation.TraceContext{})
 	// otel.SetTextMapPropagator(propagator)
 

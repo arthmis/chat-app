@@ -8,6 +8,8 @@ import (
 
 	"github.com/scylladb/gocqlx/v2"
 	"github.com/sony/sonyflake"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 	"nhooyr.io/websocket"
 )
 
@@ -85,11 +87,16 @@ func getUserCurrentRoom(ctx context.Context, session gocqlx.Session, username st
 
 func (app App) GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
+	ctx, span := otel.Tracer("").Start(req.Context(), "GetUserInfo")
+	defer span.End()
+
 	Sugar.Info("Getting user chatrooms")
 
 	session, err := app.PgStore.Get(req, "session-name")
 	if err != nil {
+		span.RecordError(err)
 		Sugar.Error("error getting session name: ", err)
+		span.SetStatus(codes.Error, "error getting session name")
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -101,10 +108,13 @@ func (app App) GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 	var chatrooms []string
 	chatrooms, err = getUserChatrooms(ctx, app.ScyllaDb, username)
 	if err != nil {
+		span.RecordError(err)
 		if err.Error() == "not found" {
 			Sugar.Infof("Chatrooms for user were not found: %v", err)
 		} else {
 			Sugar.Errorf("Error getting user chatrooms: %v", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "error getting user chatrooms")
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -113,10 +123,13 @@ func (app App) GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 	var currentRoom string
 	currentRoom, err = getUserCurrentRoom(ctx, app.ScyllaDb, username)
 	if err != nil {
+		span.RecordError(err)
 		if err.Error() == "not found" {
 			Sugar.Infof("User current chatroom not found: %v", err)
 		} else {
 			Sugar.Errorf("Error getting current user chatroom: %v", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "error getting current user chatroom")
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -130,17 +143,27 @@ func (app App) GetUserInfo(writer http.ResponseWriter, req *http.Request) {
 
 	rowsJson, err := json.Marshal(GetChatrooms{User: username, Chatrooms: chatrooms, CurrentRoom: currentRoom})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "error marhaslling row data")
 		Sugar.Error("Error marshalling row data: ", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
+	span.SetStatus(codes.Ok, "")
 	writer.WriteHeader(http.StatusOK)
 	writer.Write(rowsJson)
 }
 
 func (app App) GetRoomMessages(w http.ResponseWriter, req *http.Request) {
+	_, span := otel.Tracer("").Start(req.Context(), "GetRoomMessages")
+	defer span.End()
+
 	session, err := app.PgStore.Get(req, "session-name")
 	if err != nil {
 		Sugar.Error("error getting session name: ", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "error getting session name")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -148,6 +171,8 @@ func (app App) GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 	err = req.ParseForm()
 	if err != nil {
 		Sugar.Error("err parsing form data: ", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "error parsing form")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -160,6 +185,7 @@ func (app App) GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 			Sugar.Error("Error marshalling row data: ", err)
 		}
 		w.Write(rowsJson)
+		span.SetStatus(codes.Ok, "")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -187,15 +213,22 @@ func (app App) GetRoomMessages(w http.ResponseWriter, req *http.Request) {
 		roomMessages = append(roomMessages, outMessage)
 	}
 	if err := iter.Close(); err != nil {
-		Sugar.Error("Error closing iterato for chatroom messages: ", err)
+		Sugar.Error("Error closing iterator for chatroom messages: ", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Error closing interator for chatroom messages")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	rowsJson, err := json.Marshal(roomMessages)
 	if err != nil {
 		Sugar.Error("Error marshalling row data: ", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Error marshalling messages into Json")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
+	span.SetStatus(codes.Ok, "")
 	w.WriteHeader(http.StatusOK)
 	w.Write(rowsJson)
 }
